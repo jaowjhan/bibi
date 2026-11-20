@@ -14,25 +14,8 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <!-- Tone.js for Cute Sound Effects -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
-    <!-- Firebase SDKs for Live Shared Store Sync -->
-    <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
-        import { getAuth, signInAnonymously, signInWithCustomToken } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, getDoc, setDoc, onSnapshot } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
-
-        window.__storeCloud = {
-            initializeApp,
-            getAuth,
-            signInAnonymously,
-            signInWithCustomToken,
-            getFirestore,
-            doc,
-            getDoc,
-            setDoc,
-            onSnapshot
-        };
-        window.dispatchEvent(new Event('store-cloud-ready'));
-    </script>
+    <!-- Supabase JS SDK v2 -->
+    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 
     <style>
         /* CSS Custom Properties (Design Tokens) */
@@ -152,11 +135,15 @@
         .cute-bounce {
             transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.25s ease;
         }
-        .cute-bounce:hover {
+        .cute-bounce:hover:not(:disabled) {
             transform: translateY(-2px) scale(1.02);
         }
-        .cute-bounce:active {
+        .cute-bounce:active:not(:disabled) {
             transform: scale(0.95);
+        }
+        button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
         }
 
         /* Soft Glow & Borders */
@@ -247,6 +234,7 @@
                 <i class="fa-solid fa-heart text-4xl animate-heart-spin" style="color: var(--primary);"></i>
             </div>
         </div>
+        <p id="loading-screen-label" class="mt-4 text-xs font-medium" style="color: var(--text-muted);">กำลังโหลดข้อมูลร้านค้า...</p>
     </div>
 
     <!-- Toast Notification Container -->
@@ -255,7 +243,7 @@
     <!-- Custom Modal Container -->
     <div id="modal-overlay" class="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs hidden items-center justify-center p-4 transition-opacity duration-300 opacity-0">
         <div id="modal-box" class="rounded-3xl p-6 w-full max-w-sm border-2 border-pink-100 shadow-2xl transform scale-95 transition-transform duration-300 max-h-[88vh] overflow-y-auto" style="background-color: var(--surface-elevated); border-color: var(--border-soft); color: var(--text-main);">
-            <!-- Modal content injected by JS -->
+            <!-- Modal content injected by safe DOM API -->
         </div>
     </div>
 
@@ -271,14 +259,14 @@
         <header class="flex items-center justify-between mb-4 px-2 reveal-item">
             <div></div>
             <div class="flex items-center gap-2">
-                <button id="btn-back-client" onclick="exitAdminMode()" class="hidden cute-bounce px-3 py-1.5 rounded-full border text-xs font-medium flex items-center gap-1.5" style="background-color: var(--surface-soft); border-color: var(--border-soft); color: var(--primary-dark);">
+                <button id="btn-back-client" type="button" onclick="exitAdminMode()" class="hidden cute-bounce px-3 py-1.5 rounded-full border text-xs font-medium flex items-center gap-1.5" style="background-color: var(--surface-soft); border-color: var(--border-soft); color: var(--primary-dark);">
                     <i class="fa-solid fa-store"></i>
                     <span>หน้าร้าน</span>
                 </button>
-                <button id="btn-toggle-darkmode" onclick="toggleDarkMode()" class="cute-bounce w-9 h-9 rounded-full border shadow-xs flex items-center justify-center text-sm" style="background-color: var(--surface-card); border-color: var(--border-soft); color: var(--primary);" title="สลับโหมดมืด / สว่าง">
+                <button id="btn-toggle-darkmode" type="button" onclick="toggleDarkMode()" class="cute-bounce w-9 h-9 rounded-full border shadow-xs flex items-center justify-center text-sm" style="background-color: var(--surface-card); border-color: var(--border-soft); color: var(--primary);" title="สลับโหมดมืด / สว่าง">
                     <i id="darkmode-icon" class="fa-solid fa-moon"></i>
                 </button>
-                <button onclick="openAdminLogin()" class="cute-bounce w-9 h-9 rounded-full border shadow-xs flex items-center justify-center text-sm" style="background-color: var(--surface-card); border-color: var(--border-soft); color: var(--primary);" title="จัดการหลังบ้าน">
+                <button id="btn-open-admin" type="button" onclick="openAdminLogin()" class="cute-bounce w-9 h-9 rounded-full border shadow-xs flex items-center justify-center text-sm" style="background-color: var(--surface-card); border-color: var(--border-soft); color: var(--primary);" title="จัดการหลังบ้าน">
                     <i class="fa-solid fa-wand-magic-sparkles"></i>
                 </button>
             </div>
@@ -303,14 +291,14 @@
                         </div>
                     </div>
 
-                    <h1 id="display-shop-name" class="mt-3 text-xl font-semibold tracking-tight" style="color: var(--text-main);">Loading...</h1>
-                    <p id="display-welcome-msg" class="mt-1.5 text-sm leading-relaxed max-w-xs mx-auto" style="color: var(--text-muted);">...</p>
+                    <h1 id="display-shop-name" class="mt-3 text-xl font-semibold tracking-tight" style="color: var(--text-main);">กำลังโหลด...</h1>
+                    <p id="display-welcome-msg" class="mt-1.5 text-sm leading-relaxed max-w-xs mx-auto" style="color: var(--text-muted);">กำลังโหลดข้อมูลร้านค้า...</p>
 
                     <!-- Mini Stats Pills -->
                     <div class="flex items-center justify-center gap-2.5 mt-4">
                         <span class="px-3.5 py-1 rounded-full text-xs font-medium bg-pink-50 border border-pink-100 flex items-center gap-1.5" style="color: var(--primary-dark);">
                             <i class="fa-solid fa-heart"></i>
-                            <span id="stat-avg-badge">5.0 / 5.0</span>
+                            <span id="stat-avg-badge">0.0 / 5.0</span>
                         </span>
                         <span class="px-3.5 py-1 rounded-full text-xs font-medium bg-pink-50 border border-pink-100 flex items-center gap-1.5" style="color: var(--primary-dark);">
                             <i class="fa-solid fa-comment-dots"></i>
@@ -327,11 +315,11 @@
 
             <!-- Navigation Tabs (Reviews vs Payment) -->
             <nav class="cute-card p-1.5 flex gap-1.5 reveal-item">
-                <button id="tab-btn-reviews" onclick="switchMainTab('reviews')" class="flex-1 py-2.5 px-4 rounded-2xl text-sm font-medium transition-all flex items-center justify-center gap-2 btn-primary">
+                <button id="tab-btn-reviews" type="button" onclick="switchMainTab('reviews')" class="flex-1 py-2.5 px-4 rounded-2xl text-sm font-medium transition-all flex items-center justify-center gap-2 btn-primary">
                     <i class="fa-solid fa-heart"></i>
                     <span id="ui-tab-reviews">reviews</span>
                 </button>
-                <button id="tab-btn-payment" onclick="switchMainTab('payment')" class="flex-1 py-2.5 px-4 rounded-2xl text-sm font-medium transition-all flex items-center justify-center gap-2 text-gray-500 hover:bg-pink-50/70">
+                <button id="tab-btn-payment" type="button" onclick="switchMainTab('payment')" class="flex-1 py-2.5 px-4 rounded-2xl text-sm font-medium transition-all flex items-center justify-center gap-2 text-gray-500 hover:bg-pink-50/70">
                     <i class="fa-solid fa-wallet"></i>
                     <span id="ui-tab-payment">payment</span>
                 </button>
@@ -344,11 +332,11 @@
                 <div class="cute-card p-5 flex items-center justify-between reveal-item">
                     <div>
                         <div class="flex items-baseline gap-2 mt-1">
-                            <span id="summary-avg-score" class="text-3xl font-bold" style="color: var(--primary);">5.0</span>
+                            <span id="summary-avg-score" class="text-3xl font-bold" style="color: var(--primary);">0.0</span>
                             <span class="text-sm font-medium" style="color: var(--text-muted);">/ 5.0</span>
                         </div>
                         <div id="summary-hearts" class="flex gap-1 mt-1.5 text-sm" style="color: var(--primary);">
-                            <i class="fa-solid fa-heart"></i><i class="fa-solid fa-heart"></i><i class="fa-solid fa-heart"></i><i class="fa-solid fa-heart"></i><i class="fa-solid fa-heart"></i>
+                            <i class="fa-regular fa-heart"></i><i class="fa-regular fa-heart"></i><i class="fa-regular fa-heart"></i><i class="fa-regular fa-heart"></i><i class="fa-regular fa-heart"></i>
                         </div>
                     </div>
                     <div class="text-right">
@@ -420,12 +408,12 @@
 
                         <!-- Filter Buttons -->
                         <div class="flex items-center gap-1 bg-pink-50/80 p-1 rounded-full border border-pink-100 text-xs">
-                            <button onclick="filterReviews('all')" class="filter-btn active px-2.5 py-1 rounded-full font-medium transition-all bg-white shadow-xs" data-filter="all">ทั้งหมด</button>
-                            <button onclick="filterReviews(5)" class="filter-btn px-2.5 py-1 rounded-full transition-all inline-flex items-center gap-0.5" data-filter="5">5<i class="fa-solid fa-heart text-[10px]" style="color: var(--primary);"></i></button>
-                            <button onclick="filterReviews(4)" class="filter-btn px-2.5 py-1 rounded-full transition-all inline-flex items-center gap-0.5" data-filter="4">4<i class="fa-solid fa-heart text-[10px]" style="color: var(--primary);"></i></button>
-                            <button onclick="filterReviews(3)" class="filter-btn px-2.5 py-1 rounded-full transition-all inline-flex items-center gap-0.5" data-filter="3">3<i class="fa-solid fa-heart text-[10px]" style="color: var(--primary);"></i></button>
-                            <button onclick="filterReviews(2)" class="filter-btn px-2.5 py-1 rounded-full transition-all inline-flex items-center gap-0.5" data-filter="2">2<i class="fa-solid fa-heart text-[10px]" style="color: var(--primary);"></i></button>
-                            <button onclick="filterReviews(1)" class="filter-btn px-2.5 py-1 rounded-full transition-all inline-flex items-center gap-0.5" data-filter="1">1<i class="fa-solid fa-heart text-[10px]" style="color: var(--primary);"></i></button>
+                            <button type="button" onclick="filterReviews('all')" class="filter-btn active px-2.5 py-1 rounded-full font-medium transition-all bg-white shadow-xs" data-filter="all">ทั้งหมด</button>
+                            <button type="button" onclick="filterReviews(5)" class="filter-btn px-2.5 py-1 rounded-full transition-all inline-flex items-center gap-0.5" data-filter="5">5<i class="fa-solid fa-heart text-[10px]" style="color: var(--primary);"></i></button>
+                            <button type="button" onclick="filterReviews(4)" class="filter-btn px-2.5 py-1 rounded-full transition-all inline-flex items-center gap-0.5" data-filter="4">4<i class="fa-solid fa-heart text-[10px]" style="color: var(--primary);"></i></button>
+                            <button type="button" onclick="filterReviews(3)" class="filter-btn px-2.5 py-1 rounded-full transition-all inline-flex items-center gap-0.5" data-filter="3">3<i class="fa-solid fa-heart text-[10px]" style="color: var(--primary);"></i></button>
+                            <button type="button" onclick="filterReviews(2)" class="filter-btn px-2.5 py-1 rounded-full transition-all inline-flex items-center gap-0.5" data-filter="2">2<i class="fa-solid fa-heart text-[10px]" style="color: var(--primary);"></i></button>
+                            <button type="button" onclick="filterReviews(1)" class="filter-btn px-2.5 py-1 rounded-full transition-all inline-flex items-center gap-0.5" data-filter="1">1<i class="fa-solid fa-heart text-[10px]" style="color: var(--primary);"></i></button>
                         </div>
                     </div>
 
@@ -450,7 +438,7 @@
                         <div class="w-44 h-44 mx-auto bg-white p-2.5 rounded-2xl shadow-sm border border-pink-100 flex items-center justify-center">
                             <img id="display-qr" src="" alt="Payment QR Code" onerror="this.src='https://placehold.co/300x300/ffe5ec/e05780?text=QR+Payment'" class="w-full h-full object-contain rounded-xl">
                         </div>
-                        <p id="display-qr-caption" class="text-xs font-medium mt-3" style="color: var(--text-main);">Scan QR Code เพื่อชำระเงิน</p>
+                        <p id="display-qr-caption" class="text-xs font-medium mt-3" style="color: var(--text-main);">กำลังโหลด QR Code...</p>
                         <button type="button" onclick="openQrZoom()" class="cute-bounce mt-2 inline-flex items-center gap-1.5 text-xs font-medium px-3.5 py-1.5 rounded-full bg-white border border-pink-200" style="color: var(--primary-dark);">
                             <i class="fa-solid fa-magnifying-glass-plus"></i>
                             <span>ขยายดู QR Code</span>
@@ -473,9 +461,14 @@
                         <span class="text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-pink-100" style="color: var(--primary-dark);">Admin Studio</span>
                         <h2 class="text-lg font-semibold mt-1">จัดการร้านค้าและรีวิว</h2>
                     </div>
-                    <button type="button" onclick="resetDemoData()" class="cute-bounce text-xs px-3 py-1.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200 font-medium">
-                        <i class="fa-solid fa-rotate-left mr-1"></i>รีเซ็ตข้อมูล
-                    </button>
+                    <div class="flex items-center gap-1.5">
+                        <button id="btn-admin-logout" type="button" onclick="logoutAdmin()" class="cute-bounce text-xs px-3 py-1.5 rounded-full bg-pink-50 border border-pink-200 font-medium" style="color: var(--primary-dark);">
+                            <i class="fa-solid fa-right-from-bracket mr-1"></i>ออกจากระบบ
+                        </button>
+                        <button id="btn-reset-data" type="button" onclick="resetDemoData()" class="cute-bounce text-xs px-3 py-1.5 rounded-full bg-rose-50 text-rose-600 border border-rose-200 font-medium">
+                            <i class="fa-solid fa-rotate-left mr-1"></i>รีเซ็ตข้อมูล
+                        </button>
+                    </div>
                 </div>
 
                 <!-- Admin Sub-Tabs -->
@@ -531,7 +524,7 @@
                         </div>
                     </div>
 
-                    <button type="button" onclick="saveProfileSettings()" class="cute-bounce btn-primary w-full py-2.5 rounded-full text-sm font-medium">
+                    <button id="btn-save-profile" type="button" onclick="saveProfileSettings()" class="cute-bounce btn-primary w-full py-2.5 rounded-full text-sm font-medium">
                         บันทึกข้อมูลร้านค้า
                     </button>
                 </div>
@@ -555,7 +548,7 @@
                         <div id="admin-payment-rows" class="space-y-2.5"></div>
                     </div>
 
-                    <button type="button" onclick="savePaymentSettings()" class="cute-bounce btn-primary w-full py-2.5 rounded-full text-sm font-medium">
+                    <button id="btn-save-payment" type="button" onclick="savePaymentSettings()" class="cute-bounce btn-primary w-full py-2.5 rounded-full text-sm font-medium">
                         บันทึกช่องทางชำระเงิน
                     </button>
                 </div>
@@ -575,7 +568,7 @@
                             </select>
                         </div>
                         <input type="text" id="admin-new-rev-text" placeholder="ข้อความรีวิว (เว้นว่างได้)" class="cute-input w-full px-3 py-1.5 text-xs">
-                        <button type="button" onclick="adminAddReview()" class="cute-bounce btn-primary w-full py-2 rounded-full text-xs font-medium">
+                        <button id="btn-admin-add-review" type="button" onclick="adminAddReview()" class="cute-bounce btn-primary w-full py-2 rounded-full text-xs font-medium">
                             + เพิ่มรีวิวเข้าระบบ
                         </button>
                     </div>
@@ -622,17 +615,9 @@
                         <label class="block text-xs font-medium">ลิงก์เพลง YouTube (เล่นเบื้องหลัง)</label>
                         <input type="text" id="admin-yt-url" placeholder="https://youtu.be/... หรือ https://www.youtube.com/watch?v=..." class="cute-input w-full px-3.5 py-2 text-xs">
                         <input type="text" id="admin-song-title" placeholder="ชื่อเพลงที่แสดงบนแถบฟังเพลง" class="cute-input w-full px-3.5 py-2 text-xs">
-                        <button type="button" onclick="saveThemeAndMusic()" class="cute-bounce btn-primary w-full py-2.5 rounded-full text-sm font-medium">
+                        <button id="btn-save-theme-music" type="button" onclick="saveThemeAndMusic()" class="cute-bounce btn-primary w-full py-2.5 rounded-full text-sm font-medium">
                             บันทึกธีมและเพลง
                         </button>
-                    </div>
-
-                    <div class="pt-2 border-t border-pink-100">
-                        <label class="block text-xs font-medium mb-1">เปลี่ยนรหัสผ่านแอดมิน (บังคับ 6 หลัก)</label>
-                        <div class="flex gap-2">
-                            <input type="password" id="admin-new-pin" inputmode="numeric" pattern="\d{6}" maxlength="6" placeholder="รหัสผ่านใหม่ 6 หลัก" class="cute-input flex-1 px-3.5 py-2 text-xs text-center tracking-widest">
-                            <button type="button" onclick="changeAdminPin()" class="cute-bounce px-4 py-2 rounded-full bg-pink-100 text-xs font-medium" style="color: var(--primary-dark);">อัปเดต</button>
-                        </div>
                     </div>
                 </div>
             </div>
@@ -647,7 +632,7 @@
 
         <div class="flex-1 min-w-0">
             <div class="flex items-center gap-1.5">
-                <span id="music-track-title" class="text-xs font-medium truncate">Sweetie Lo-Fi Melody</span>
+                <span id="music-track-title" class="text-xs font-medium truncate">Sweetie Cute Chime Melody</span>
                 <div id="music-eq" class="flex items-end gap-0.5 h-3.5 shrink-0">
                     <span class="eq-bar"></span>
                     <span class="eq-bar"></span>
@@ -660,9 +645,14 @@
 
     <script>
         /* =========================================================================
-           1. STATE & DEFAULT DATA
+           1. SUPABASE CONFIGURATION & STATE
            ========================================================================= */
-        const STORAGE_KEY = 'sweetie_store_credit_v1';
+        const SUPABASE_URL = 'https://cyirvdtpmcsckrfvfmij.supabase.co';
+        const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_-swiCU7PUKGPwend_SBCSg_g9tHbyVe';
+
+        const supabaseClient = (window.supabase && typeof window.supabase.createClient === 'function')
+            ? window.supabase.createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY)
+            : null;
 
         const THEMES = {
             sakura: {
@@ -727,61 +717,40 @@
             }
         };
 
-        const DEFAULT_STATE = {
-            adminPin: '123456',
+        const EMPTY_STATE = {
+            storeId: null,
             themeKey: 'sakura',
             customColor: '',
             darkMode: false,
             profile: {
-                shopName: 'lovely',
-                welcomeMsg: 'ยินดีต้อนรับค่ะ ส่งของไว ดูแลใส่ใจทุกออเดอร์ ฝากรีวิวเป็นกำลังใจให้ร้านเล็ก ๆ ด้วยนะคะ',
-                avatar: 'https://placehold.co/240x240/ffe5ec/e05780?text=lovely',
-                banner: 'https://placehold.co/800x320/ffe5ec/e05780?text=lovely',
-                social1: { label: 'LINE Official', url: 'https://line.me' },
-                social2: { label: 'Instagram', url: 'https://instagram.com' }
+                shopName: '',
+                welcomeMsg: '',
+                avatar: '',
+                banner: '',
+                social1: { label: '', url: '' },
+                social2: { label: '', url: '' }
             },
             payment: {
-                qrImage: 'https://placehold.co/300x300/ffe5ec/e05780?text=PromptPay+QR',
-                qrCaption: 'สแกนพร้อมเพย์ / QR Code เพื่อชำระเงิน',
-                channels: [
-                    { id: 'pay-1', method: 'พร้อมเพย์ (PromptPay)', accountName: 'น.ส. หวานใจ รักบริการ', accountNumber: '081-234-5678' },
-                    { id: 'pay-2', method: 'กสิกรไทย (KBANK)', accountName: 'น.ส. หวานใจ รักบริการ', accountNumber: '123-4-56789-0' }
-                ]
+                qrImage: '',
+                qrCaption: '',
+                channels: []
             },
             music: {
                 youtubeUrl: '',
                 songTitle: 'Sweetie Cute Chime Melody',
                 isPlaying: false
             },
-            reviews: [
-                {
-                    id: 'rev-1',
-                    name: 'มินนี่',
-                    avatar: '',
-                    rating: 5,
-                    text: 'ตอบไวมากค่ะ ส่งของเรียบร้อยน่ารักสุด ๆ เดี๋ยวมาอุดหนุนซ้ำแน่นอนค่า',
-                    createdAt: Date.now() - 86400000 * 2
-                },
-                {
-                    id: 'rev-2',
-                    name: 'Anonymous',
-                    avatar: '',
-                    rating: 5,
-                    text: '+1 เครดิตแน่น ๆ ค่ะ ดูแลดีมาก',
-                    createdAt: Date.now() - 86400000
-                },
-                {
-                    id: 'rev-3',
-                    name: 'น้องไข่หวาน',
-                    avatar: '',
-                    rating: 4,
-                    text: 'น่ารักมากเลยค่ะ รอของแป๊บเดียวก็ได้แล้ว',
-                    createdAt: Date.now() - 3600000 * 5
-                }
-            ]
+            reviews: []
         };
 
-        let state = loadState();
+        let state = structuredClone(EMPTY_STATE);
+        let isLoadingStore = true;
+        let storeLoadError = '';
+        let isLoadingReviews = true;
+        let reviewsLoadError = '';
+        let isAdminVerified = false;
+        let currentSessionUser = null;
+
         let selectedRating = 5;
         let currentFilter = 'all';
         let pendingReviewAvatar = '';
@@ -790,163 +759,228 @@
         let ytApiReady = false;
         let toneSynth = null;
         let synthLoopInterval = null;
-        let cloudDb = null;
-        let cloudUser = null;
-        let cloudDocRef = null;
-        let cloudUnsubscribe = null;
-        let isApplyingRemoteState = false;
-        let cloudSaveTimer = null;
 
-        function mergeIncomingState(parsed) {
-            if (!parsed || typeof parsed !== 'object') return structuredClone(DEFAULT_STATE);
-            const normalizedPin = /^\d{6}$/.test(String(parsed.adminPin || '').trim())
-                ? String(parsed.adminPin).trim()
-                : DEFAULT_STATE.adminPin;
-            return {
-                ...structuredClone(DEFAULT_STATE),
-                ...parsed,
-                adminPin: normalizedPin,
-                darkMode: typeof parsed.darkMode === 'boolean' ? parsed.darkMode : false,
-                profile: { ...structuredClone(DEFAULT_STATE.profile), ...(parsed.profile || {}) },
-                payment: { ...structuredClone(DEFAULT_STATE.payment), ...(parsed.payment || {}) },
-                music: { ...structuredClone(DEFAULT_STATE.music), ...(parsed.music || {}) },
-                reviews: Array.isArray(parsed.reviews) ? parsed.reviews : structuredClone(DEFAULT_STATE.reviews)
-            };
-        }
-
-        function loadState() {
+        // Lock mechanism to prevent duplicate submissions/clicks
+        const activeLocks = new Set();
+        async function withButtonLock(lockKey, buttonIds, task) {
+            if (activeLocks.has(lockKey)) return;
+            activeLocks.add(lockKey);
+            (buttonIds || []).forEach(id => {
+                const btn = document.getElementById(id);
+                if (btn) btn.disabled = true;
+            });
             try {
-                const raw = localStorage.getItem(STORAGE_KEY);
-                if (!raw) return structuredClone(DEFAULT_STATE);
-                return mergeIncomingState(JSON.parse(raw));
-            } catch (err) {
-                console.error('Failed to load state:', err);
-                return structuredClone(DEFAULT_STATE);
-            }
-        }
-
-        function buildPublicStorePayload() {
-            const { adminPin, ...publicData } = state;
-            return {
-                ...publicData,
-                updatedAt: Date.now()
-            };
-        }
-
-        async function pushStateToCloud(immediate = false) {
-            if (!cloudDb || !cloudUser || !cloudDocRef || isApplyingRemoteState) return;
-            const runWrite = async () => {
-                try {
-                    const { setDoc } = window.__storeCloud;
-                    await setDoc(cloudDocRef, buildPublicStorePayload(), { merge: true });
-                } catch (err) {
-                    console.error('Failed to sync store state:', err);
-                }
-            };
-            if (immediate) {
-                if (cloudSaveTimer) clearTimeout(cloudSaveTimer);
-                await runWrite();
-            } else {
-                if (cloudSaveTimer) clearTimeout(cloudSaveTimer);
-                cloudSaveTimer = setTimeout(runWrite, 150);
-            }
-        }
-
-        function saveState(immediateCloudSync = false) {
-            try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-            } catch (err) {
-                console.error('Failed to save state:', err);
-                showToast('พื้นที่จัดเก็บเบราว์เซอร์เต็ม ลองใช้รูปขนาดเล็กลงนะคะ', 'error');
-            }
-            pushStateToCloud(immediateCloudSync);
-        }
-
-        async function initLiveCloudSync() {
-            const sdk = window.__storeCloud;
-            if (!sdk || typeof __firebase_config === 'undefined' || !__firebase_config) return;
-
-            try {
-                const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
-                const firebaseConfig = JSON.parse(__firebase_config);
-                const app = sdk.initializeApp(firebaseConfig);
-                const auth = sdk.getAuth(app);
-                cloudDb = sdk.getFirestore(app);
-
-                if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-                    await sdk.signInWithCustomToken(auth, __initial_auth_token);
-                } else {
-                    await sdk.signInAnonymously(auth);
-                }
-                cloudUser = auth.currentUser;
-                if (!cloudUser) return;
-
-                cloudDocRef = sdk.doc(cloudDb, 'artifacts', appId, 'public', 'data', 'storefront', 'main');
-                const snap = await sdk.getDoc(cloudDocRef);
-                if (snap.exists()) {
-                    isApplyingRemoteState = true;
-                    state = mergeIncomingState({ ...state, ...snap.data(), adminPin: state.adminPin });
-                    try {
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-                    } catch (_) {}
-                    isApplyingRemoteState = false;
-                    renderAll();
-                } else {
-                    await pushStateToCloud(true);
-                }
-
-                if (cloudUnsubscribe) cloudUnsubscribe();
-                cloudUnsubscribe = sdk.onSnapshot(cloudDocRef, (docSnap) => {
-                    if (!docSnap.exists()) return;
-                    const remote = docSnap.data();
-                    if (!remote || !remote.updatedAt) return;
-                    if (remote.updatedAt <= (state.updatedAt || 0)) return;
-
-                    const wasPlaying = Boolean(state.music?.isPlaying);
-                    const prevUrl = state.music?.youtubeUrl || '';
-                    isApplyingRemoteState = true;
-                    state = mergeIncomingState({
-                        ...remote,
-                        adminPin: state.adminPin,
-                        music: {
-                            ...DEFAULT_STATE.music,
-                            ...(remote.music || {}),
-                            isPlaying: wasPlaying
-                        }
-                    });
-                    try {
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-                    } catch (_) {}
-                    isApplyingRemoteState = false;
-
-                    renderAll();
-                    if (document.getElementById('admin-view') && !document.getElementById('admin-view').classList.contains('hidden')) {
-                        populateAdminForms();
-                        renderAdminReviewsList();
-                        renderThemePalette();
-                    }
-                    if (wasPlaying && (state.music.youtubeUrl || '') !== prevUrl) {
-                        loadYouTubeVideoIfNeeded(true);
-                    }
-                }, (err) => {
-                    console.error('Live store listener error:', err);
+                return await task();
+            } finally {
+                activeLocks.delete(lockKey);
+                (buttonIds || []).forEach(id => {
+                    const btn = document.getElementById(id);
+                    if (btn) btn.disabled = false;
                 });
-            } catch (err) {
-                console.error('Live cloud sync init failed:', err);
-            }
-        }
-
-        function saveState() {
-            try {
-                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-            } catch (err) {
-                console.error('Failed to save state:', err);
-                showToast('พื้นที่จัดเก็บเบราว์เซอร์เต็ม ลองใช้รูปขนาดเล็กลงนะคะ', 'error');
             }
         }
 
         /* =========================================================================
-           2. SOUND EFFECTS (TONE.JS) & UI FEEDBACK
+           2. SUPABASE QUERIES & ADMIN VERIFICATION (Session + public.is_admin())
+           ========================================================================= */
+        async function verifyAdminSession() {
+            if (!supabaseClient) {
+                isAdminVerified = false;
+                currentSessionUser = null;
+                return false;
+            }
+            const { data: { session }, error: sessionErr } = await supabaseClient.auth.getSession();
+            if (sessionErr || !session || !session.user) {
+                isAdminVerified = false;
+                currentSessionUser = null;
+                return false;
+            }
+            currentSessionUser = session.user;
+            const { data: isAdminFlag, error: rpcErr } = await supabaseClient.rpc('is_admin');
+            if (rpcErr || isAdminFlag !== true) {
+                isAdminVerified = false;
+                return false;
+            }
+            isAdminVerified = true;
+            return true;
+        }
+
+        async function loadStoreAndPaymentsFromSupabase() {
+            if (!supabaseClient) {
+                isLoadingStore = false;
+                storeLoadError = 'เกิดข้อผิดพลาด: ไม่พบระบบเชื่อมต่อ Supabase';
+                renderAll();
+                return;
+            }
+
+            isLoadingStore = true;
+            storeLoadError = '';
+            renderProfile();
+            renderPayment();
+
+            try {
+                const { data: storeRows, error: storeErr } = await supabaseClient
+                    .from('stores')
+                    .select('*')
+                    .order('created_at', { ascending: true })
+                    .limit(1);
+
+                if (storeErr) throw storeErr;
+
+                if (!storeRows || storeRows.length === 0) {
+                    state.storeId = null;
+                    state.profile = structuredClone(EMPTY_STATE.profile);
+                    state.payment = structuredClone(EMPTY_STATE.payment);
+                    state.themeKey = 'sakura';
+                    state.customColor = '';
+                    state.darkMode = false;
+                    state.music.youtubeUrl = '';
+                    state.music.songTitle = 'Sweetie Cute Chime Melody';
+                    isLoadingStore = false;
+                    renderAll();
+                    return;
+                }
+
+                const s = storeRows[0];
+                state.storeId = s.id;
+                state.themeKey = s.theme_key || 'sakura';
+                state.customColor = s.custom_color || '';
+                state.darkMode = Boolean(s.dark_mode);
+                state.profile = {
+                    shopName: s.shop_name || '',
+                    welcomeMsg: s.welcome_msg || '',
+                    avatar: s.avatar_url || '',
+                    banner: s.banner_url || '',
+                    social1: { label: s.social1_label || '', url: s.social1_url || '' },
+                    social2: { label: s.social2_label || '', url: s.social2_url || '' }
+                };
+                state.payment.qrImage = s.qr_image_url || '';
+                state.payment.qrCaption = s.qr_caption || '';
+                state.music.youtubeUrl = s.youtube_url || '';
+                state.music.songTitle = s.song_title || 'Sweetie Cute Chime Melody';
+
+                const { data: channelRows, error: chErr } = await supabaseClient
+                    .from('payment_channels')
+                    .select('*')
+                    .eq('store_id', s.id)
+                    .order('sort_order', { ascending: true })
+                    .order('created_at', { ascending: true });
+
+                if (chErr) throw chErr;
+
+                state.payment.channels = (channelRows || []).map(ch => ({
+                    id: ch.id,
+                    method: ch.method || '',
+                    accountName: ch.account_name || '',
+                    accountNumber: ch.account_number || '',
+                    sortOrder: ch.sort_order ?? 0
+                }));
+
+                isLoadingStore = false;
+                storeLoadError = '';
+                renderAll();
+            } catch (err) {
+                console.error('Supabase store load error:', err);
+                isLoadingStore = false;
+                storeLoadError = `เกิดข้อผิดพลาดในการโหลดข้อมูลร้านค้า: ${err.message || 'ไม่สามารถดึงข้อมูลได้'}`;
+                renderAll();
+            }
+        }
+
+        async function loadReviewsFromSupabase() {
+            if (!supabaseClient) {
+                isLoadingReviews = false;
+                reviewsLoadError = 'เกิดข้อผิดพลาด: ไม่พบระบบเชื่อมต่อ Supabase';
+                renderStatsAndReviews();
+                return;
+            }
+
+            isLoadingReviews = true;
+            reviewsLoadError = '';
+            renderStatsAndReviews();
+
+            try {
+                let query = supabaseClient
+                    .from('reviews')
+                    .select('*')
+                    .order('created_at', { ascending: false });
+
+                if (state.storeId) {
+                    query = query.eq('store_id', state.storeId);
+                }
+
+                const { data: reviewRows, error: revErr } = await query;
+                if (revErr) throw revErr;
+
+                state.reviews = (reviewRows || []).map(r => ({
+                    id: r.id,
+                    storeId: r.store_id,
+                    name: r.reviewer_name || 'Anonymous',
+                    avatar: r.avatar_url || '',
+                    rating: Number(r.rating) || 5,
+                    text: r.comment_text || '+1',
+                    createdAt: r.created_at ? new Date(r.created_at).getTime() : Date.now()
+                }));
+
+                isLoadingReviews = false;
+                reviewsLoadError = '';
+                renderStatsAndReviews();
+                if (!document.getElementById('admin-view').classList.contains('hidden')) {
+                    renderAdminReviewsList();
+                }
+            } catch (err) {
+                console.error('Supabase reviews load error:', err);
+                isLoadingReviews = false;
+                reviewsLoadError = `เกิดข้อผิดพลาดในการโหลดรีวิว: ${err.message || 'ไม่สามารถดึงรีวิวได้'}`;
+                renderStatsAndReviews();
+            }
+        }
+
+        async function getOrCreateStoreId() {
+            if (state.storeId) return state.storeId;
+            if (!supabaseClient) throw new Error('ไม่พบระบบเชื่อมต่อ Supabase');
+
+            const { data: rows, error: selErr } = await supabaseClient
+                .from('stores')
+                .select('id')
+                .order('created_at', { ascending: true })
+                .limit(1);
+
+            if (selErr) throw selErr;
+            if (rows && rows.length > 0) {
+                state.storeId = rows[0].id;
+                return state.storeId;
+            }
+
+            const { data: created, error: insErr } = await supabaseClient
+                .from('stores')
+                .insert([{
+                    shop_name: state.profile.shopName || 'lovely',
+                    welcome_msg: state.profile.welcomeMsg || '',
+                    avatar_url: state.profile.avatar || '',
+                    banner_url: state.profile.banner || '',
+                    social1_label: state.profile.social1?.label || '',
+                    social1_url: state.profile.social1?.url || '',
+                    social2_label: state.profile.social2?.label || '',
+                    social2_url: state.profile.social2?.url || '',
+                    qr_image_url: state.payment.qrImage || '',
+                    qr_caption: state.payment.qrCaption || '',
+                    theme_key: state.themeKey || 'sakura',
+                    custom_color: state.customColor || '',
+                    dark_mode: Boolean(state.darkMode),
+                    youtube_url: state.music.youtubeUrl || '',
+                    song_title: state.music.songTitle || 'Sweetie Cute Chime Melody'
+                }])
+                .select('id')
+                .single();
+
+            if (insErr) throw insErr;
+            state.storeId = created.id;
+            return state.storeId;
+        }
+
+        /* =========================================================================
+           3. SOUND EFFECTS (TONE.JS) & SAFE DOM HELPERS
            ========================================================================= */
         async function playCuteSound(type = 'pop') {
             try {
@@ -975,19 +1009,35 @@
             }
         }
 
+        function createEl(tag, className = '', text = '') {
+            const el = document.createElement(tag);
+            if (className) el.className = className;
+            if (text !== undefined && text !== null && text !== '') {
+                el.textContent = String(text);
+            }
+            return el;
+        }
+
         function showToast(message, type = 'success') {
             const container = document.getElementById('toast-container');
-            const toast = document.createElement('div');
             const isError = type === 'error';
-            const iconClass = isError ? 'fa-circle-exclamation' : 'fa-heart';
 
-            toast.className = `px-4 py-2.5 rounded-2xl shadow-lg text-xs font-medium flex items-center gap-2.5 pointer-events-auto transition-all duration-300 opacity-0 -translate-y-2 ${isError ? 'bg-rose-500 text-white border border-rose-400' : 'border'}`;
+            const toast = createEl(
+                'div',
+                `px-4 py-2.5 rounded-2xl shadow-lg text-xs font-medium flex items-center gap-2.5 pointer-events-auto transition-all duration-300 opacity-0 -translate-y-2 ${isError ? 'bg-rose-500 text-white border border-rose-400' : 'border'}`
+            );
             if (!isError) {
                 toast.style.backgroundColor = 'var(--surface-elevated)';
                 toast.style.borderColor = 'var(--border-soft)';
                 toast.style.color = 'var(--text-main)';
             }
-            toast.innerHTML = `<i class="fa-solid ${iconClass}" style="color: ${isError ? '#fff' : 'var(--primary)'};"></i><span>${escapeHtml(message)}</span>`;
+
+            const icon = createEl('i', `fa-solid ${isError ? 'fa-circle-exclamation' : 'fa-heart'}`);
+            icon.style.color = isError ? '#fff' : 'var(--primary)';
+            const textSpan = createEl('span', '', message);
+
+            toast.appendChild(icon);
+            toast.appendChild(textSpan);
             container.appendChild(toast);
 
             requestAnimationFrame(() => {
@@ -997,13 +1047,16 @@
             setTimeout(() => {
                 toast.classList.add('opacity-0', '-translate-y-2');
                 setTimeout(() => toast.remove(), 300);
-            }, 2600);
+            }, 2800);
         }
 
-        function openModal(htmlContent) {
+        function openModal(renderFn) {
             const overlay = document.getElementById('modal-overlay');
             const box = document.getElementById('modal-box');
-            box.innerHTML = htmlContent;
+            box.replaceChildren();
+            if (typeof renderFn === 'function') {
+                renderFn(box);
+            }
             overlay.classList.remove('hidden');
             overlay.classList.add('flex');
             requestAnimationFrame(() => {
@@ -1025,15 +1078,6 @@
             }, 250);
         }
 
-        function escapeHtml(str) {
-            return String(str || '')
-                .replace(/&/g, '&amp;')
-                .replace(/</g, '&lt;')
-                .replace(/>/g, '&gt;')
-                .replace(/"/g, '&quot;')
-                .replace(/'/g, '&#039;');
-        }
-
         function formatRelativeTime(timestamp) {
             const diffSec = Math.max(1, Math.floor((Date.now() - timestamp) / 1000));
             if (diffSec < 60) return 'just now';
@@ -1045,8 +1089,14 @@
             return `${diffDay}d ago`;
         }
 
+        function sanitizeUrl(url) {
+            const trimmed = (url || '').trim();
+            if (/^https?:\/\//i.test(trimmed)) return trimmed;
+            return '#';
+        }
+
         /* =========================================================================
-           3. THEME ENGINE & RENDERING
+           4. THEME ENGINE & RENDERING (SAFE DOM API)
            ========================================================================= */
         function applyDarkMode(isDark) {
             const dark = Boolean(isDark);
@@ -1071,13 +1121,23 @@
             }
         }
 
-        function toggleDarkMode() {
+        async function toggleDarkMode() {
             state.darkMode = !state.darkMode;
-            saveState();
             applyTheme(state.themeKey);
             renderStatsAndReviews();
             renderPayment();
             playCuteSound('pop');
+
+            if (isAdminVerified && state.storeId && supabaseClient) {
+                const { error } = await supabaseClient
+                    .from('stores')
+                    .update({ dark_mode: state.darkMode })
+                    .eq('id', state.storeId);
+                if (error) {
+                    showToast(`เกิดข้อผิดพลาดในการบันทึกโหมดสี: ${error.message}`, 'error');
+                    return;
+                }
+            }
             showToast(state.darkMode ? 'เปิดโหมดมืดแล้วค่ะ' : 'เปิดโหมดสว่างแล้วค่ะ');
         }
 
@@ -1174,56 +1234,127 @@
         }
 
         function renderProfile() {
-            const { shopName, welcomeMsg, avatar, banner, social1, social2 } = state.profile;
-            document.title = `${shopName} | Store & Credit`;
-            document.getElementById('display-shop-name').textContent = shopName;
-            document.getElementById('display-welcome-msg').textContent = welcomeMsg;
-            document.getElementById('display-avatar').src = avatar || 'https://placehold.co/240x240/ffe5ec/e05780?text=Sweetie';
-            document.getElementById('display-banner').src = banner || 'https://placehold.co/800x320/ffe5ec/e05780?text=Sweetie+Store';
-
+            const nameEl = document.getElementById('display-shop-name');
+            const msgEl = document.getElementById('display-welcome-msg');
+            const avatarEl = document.getElementById('display-avatar');
+            const bannerEl = document.getElementById('display-banner');
             const socialContainer = document.getElementById('social-links-container');
-            const items = [
-                { data: social1, icon: 'fa-comment-dots' },
-                { data: social2, icon: 'fa-heart' }
-            ];
-            socialContainer.innerHTML = items.map((item, idx) => {
-                const safeUrl = sanitizeUrl(item.data?.url || '#');
-                const label = escapeHtml(item.data?.label || `ช่องทางที่ ${idx + 1}`);
-                return `
-                    <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" onclick="playCuteSound('pop')"
-                       class="cute-bounce py-2.5 px-3 rounded-2xl bg-pink-50/90 hover:bg-pink-100/80 border border-pink-100 text-xs font-medium flex items-center justify-center gap-2 truncate"
-                       style="color: var(--primary-dark);">
-                        <i class="fa-solid ${item.icon}"></i>
-                        <span class="truncate">${label}</span>
-                    </a>
-                `;
-            }).join('');
-        }
 
-        function sanitizeUrl(url) {
-            const trimmed = (url || '').trim();
-            if (/^https?:\/\//i.test(trimmed)) return trimmed;
-            return '#';
+            if (isLoadingStore) {
+                nameEl.textContent = 'กำลังโหลด...';
+                msgEl.textContent = 'กำลังโหลดข้อมูลร้านค้า...';
+                socialContainer.replaceChildren();
+                return;
+            }
+
+            if (storeLoadError) {
+                nameEl.textContent = 'เกิดข้อผิดพลาด';
+                msgEl.textContent = storeLoadError;
+                socialContainer.replaceChildren();
+                return;
+            }
+
+            if (!state.storeId) {
+                nameEl.textContent = 'ไม่มีข้อมูล';
+                msgEl.textContent = 'ไม่มีข้อมูลร้านค้าในระบบ';
+                socialContainer.replaceChildren();
+                return;
+            }
+
+            const { shopName, welcomeMsg, avatar, banner, social1, social2 } = state.profile;
+            document.title = `${shopName || 'lovely'} | Store & Credit`;
+            nameEl.textContent = shopName || 'ไม่มีข้อมูล';
+            msgEl.textContent = welcomeMsg || 'ไม่มีข้อมูล';
+
+            if (avatar) {
+                avatarEl.src = avatar;
+            } else {
+                avatarEl.removeAttribute('src');
+            }
+
+            if (banner) {
+                bannerEl.src = banner;
+            } else {
+                bannerEl.removeAttribute('src');
+            }
+
+            socialContainer.replaceChildren();
+            const items = [
+                { data: social1, icon: 'fa-comment-dots', fallback: 'ช่องทางที่ 1' },
+                { data: social2, icon: 'fa-heart', fallback: 'ช่องทางที่ 2' }
+            ];
+
+            items.forEach((item) => {
+                const safeUrl = sanitizeUrl(item.data?.url || '#');
+                const label = (item.data?.label || '').trim() || item.fallback;
+
+                const anchor = createEl(
+                    'a',
+                    'cute-bounce py-2.5 px-3 rounded-2xl bg-pink-50/90 hover:bg-pink-100/80 border border-pink-100 text-xs font-medium flex items-center justify-center gap-2 truncate'
+                );
+                anchor.href = safeUrl;
+                if (safeUrl !== '#') {
+                    anchor.target = '_blank';
+                    anchor.rel = 'noopener noreferrer';
+                }
+                anchor.style.color = 'var(--primary-dark)';
+                anchor.addEventListener('click', (e) => {
+                    if (safeUrl === '#') e.preventDefault();
+                    playCuteSound('pop');
+                });
+
+                const icon = createEl('i', `fa-solid ${item.icon}`);
+                const labelSpan = createEl('span', 'truncate', label);
+                anchor.appendChild(icon);
+                anchor.appendChild(labelSpan);
+                socialContainer.appendChild(anchor);
+            });
         }
 
         function renderStatsAndReviews() {
+            const listEl = document.getElementById('reviews-list');
+
+            if (isLoadingReviews) {
+                document.getElementById('stat-avg-badge').textContent = '... / 5.0';
+                document.getElementById('stat-count-badge').textContent = 'กำลังโหลด...';
+                document.getElementById('summary-avg-score').textContent = '...';
+                document.getElementById('summary-total-reviews').textContent = '...';
+                listEl.replaceChildren();
+                const box = createEl('div', 'text-center py-8 px-4 rounded-2xl bg-pink-50/50 border border-dashed border-pink-200');
+                box.appendChild(createEl('p', 'text-xs font-medium', 'กำลังโหลดรีวิว...'));
+                listEl.appendChild(box);
+                return;
+            }
+
+            if (reviewsLoadError) {
+                document.getElementById('stat-avg-badge').textContent = '0.0 / 5.0';
+                document.getElementById('stat-count-badge').textContent = '0 รีวิว';
+                document.getElementById('summary-avg-score').textContent = '0.0';
+                document.getElementById('summary-total-reviews').textContent = '0';
+                listEl.replaceChildren();
+                const box = createEl('div', 'text-center py-8 px-4 rounded-2xl bg-rose-50/60 border border-dashed border-rose-200');
+                box.appendChild(createEl('p', 'text-xs font-medium text-rose-600', reviewsLoadError));
+                listEl.appendChild(box);
+                return;
+            }
+
             const reviews = state.reviews;
             const total = reviews.length;
             const avg = total > 0
                 ? (reviews.reduce((sum, r) => sum + Number(r.rating || 5), 0) / total).toFixed(1)
-                : '5.0';
+                : '0.0';
 
             document.getElementById('stat-avg-badge').textContent = `${avg} / 5.0`;
             document.getElementById('stat-count-badge').textContent = `${total} รีวิว`;
             document.getElementById('summary-avg-score').textContent = avg;
             document.getElementById('summary-total-reviews').textContent = total;
 
-            const roundedHearts = Math.round(parseFloat(avg));
-            let summaryHeartsHtml = '';
+            const summaryHeartsEl = document.getElementById('summary-hearts');
+            summaryHeartsEl.replaceChildren();
+            const roundedHearts = total > 0 ? Math.round(parseFloat(avg)) : 0;
             for (let i = 1; i <= 5; i++) {
-                summaryHeartsHtml += `<i class="${i <= roundedHearts ? 'fa-solid' : 'fa-regular'} fa-heart"></i>`;
+                summaryHeartsEl.appendChild(createEl('i', `${i <= roundedHearts ? 'fa-solid' : 'fa-regular'} fa-heart`));
             }
-            document.getElementById('summary-hearts').innerHTML = summaryHeartsHtml;
 
             selectRating(selectedRating, false);
 
@@ -1231,73 +1362,146 @@
                 ? reviews
                 : reviews.filter(r => Number(r.rating) === Number(currentFilter));
 
-            const listEl = document.getElementById('reviews-list');
+            listEl.replaceChildren();
             if (filtered.length === 0) {
-                listEl.innerHTML = `
-                    <div class="text-center py-8 px-4 rounded-2xl bg-pink-50/50 border border-dashed border-pink-200">
-                        <i class="fa-regular fa-face-smile-wink text-2xl mb-2" style="color: var(--primary);"></i>
-                        <p class="text-xs font-medium" style="color: var(--text-muted);">ยังไม่มีรีวิวในหมวดนี้เลยค่ะ</p>
-                    </div>
-                `;
+                const emptyBox = createEl('div', 'text-center py-8 px-4 rounded-2xl bg-pink-50/50 border border-dashed border-pink-200');
+                const icon = createEl('i', 'fa-regular fa-face-smile-wink text-2xl mb-2');
+                icon.style.color = 'var(--primary)';
+                const msg = createEl('p', 'text-xs font-medium', total === 0 ? 'ไม่มีข้อมูลรีวิว' : 'ยังไม่มีรีวิวในหมวดนี้เลยค่ะ');
+                msg.style.color = 'var(--text-muted)';
+                emptyBox.appendChild(icon);
+                emptyBox.appendChild(msg);
+                listEl.appendChild(emptyBox);
                 return;
             }
 
-            listEl.innerHTML = filtered.map(rev => {
-                const displayName = escapeHtml((rev.name || '').trim() || 'Anonymous');
+            filtered.forEach(rev => {
+                const displayName = (rev.name || '').trim() || 'Anonymous';
                 const ratingNum = Math.min(5, Math.max(1, Number(rev.rating) || 5));
-                let hearts = '';
-                for (let i = 1; i <= 5; i++) {
-                    hearts += `<i class="${i <= ratingNum ? 'fa-solid' : 'fa-regular'} fa-heart text-xs" style="color: var(--primary);"></i>`;
+
+                const article = createEl(
+                    'article',
+                    'p-3.5 rounded-2xl border shadow-2xs flex gap-3 items-start transition-all'
+                );
+                article.style.backgroundColor = 'var(--surface-subcard)';
+                article.style.borderColor = 'var(--border-soft)';
+
+                if (rev.avatar) {
+                    const avatarImg = createEl('img', 'w-10 h-10 rounded-2xl object-cover border border-pink-100 shrink-0');
+                    avatarImg.src = rev.avatar;
+                    avatarImg.alt = displayName;
+                    avatarImg.onerror = () => { avatarImg.style.display = 'none'; };
+                    article.appendChild(avatarImg);
+                } else {
+                    const initialBox = createEl(
+                        'div',
+                        'w-10 h-10 rounded-2xl bg-pink-100/80 flex items-center justify-center text-xs font-semibold shrink-0',
+                        displayName.charAt(0).toUpperCase()
+                    );
+                    initialBox.style.color = 'var(--primary-dark)';
+                    article.appendChild(initialBox);
                 }
 
-                const avatarHtml = rev.avatar
-                    ? `<img src="${rev.avatar}" alt="${displayName}" onerror="this.style.display='none'" class="w-10 h-10 rounded-2xl object-cover border border-pink-100 shrink-0">`
-                    : `<div class="w-10 h-10 rounded-2xl bg-pink-100/80 flex items-center justify-center text-xs font-semibold shrink-0" style="color: var(--primary-dark);">${escapeHtml(displayName.charAt(0).toUpperCase())}</div>`;
+                const contentBox = createEl('div', 'flex-1 min-w-0');
+                const headerRow = createEl('div', 'flex items-center justify-between gap-2');
+                const nameSpan = createEl('span', 'text-xs font-semibold truncate', displayName);
+                const timeSpan = createEl('span', 'text-[10px] shrink-0', formatRelativeTime(rev.createdAt));
+                timeSpan.style.color = 'var(--text-muted)';
+                headerRow.appendChild(nameSpan);
+                headerRow.appendChild(timeSpan);
 
-                return `
-                    <article class="p-3.5 rounded-2xl border shadow-2xs flex gap-3 items-start transition-all" style="background-color: var(--surface-subcard); border-color: var(--border-soft);">
-                        ${avatarHtml}
-                        <div class="flex-1 min-w-0">
-                            <div class="flex items-center justify-between gap-2">
-                                <span class="text-xs font-semibold truncate">${displayName}</span>
-                                <span class="text-[10px] shrink-0" style="color: var(--text-muted);">${formatRelativeTime(rev.createdAt)}</span>
-                            </div>
-                            <div class="flex items-center gap-0.5 mt-0.5">${hearts}</div>
-                            <p class="text-xs mt-1.5 leading-relaxed break-words" style="color: var(--text-main);">${escapeHtml(rev.text)}</p>
-                        </div>
-                    </article>
-                `;
-            }).join('');
+                const heartsRow = createEl('div', 'flex items-center gap-0.5 mt-0.5');
+                for (let i = 1; i <= 5; i++) {
+                    const h = createEl('i', `${i <= ratingNum ? 'fa-solid' : 'fa-regular'} fa-heart text-xs`);
+                    h.style.color = 'var(--primary)';
+                    heartsRow.appendChild(h);
+                }
+
+                const commentP = createEl('p', 'text-xs mt-1.5 leading-relaxed break-words', rev.text || '+1');
+                commentP.style.color = 'var(--text-main)';
+
+                contentBox.appendChild(headerRow);
+                contentBox.appendChild(heartsRow);
+                contentBox.appendChild(commentP);
+                article.appendChild(contentBox);
+                listEl.appendChild(article);
+            });
         }
 
         function renderPayment() {
-            const { qrImage, qrCaption, channels } = state.payment;
-            document.getElementById('display-qr').src = qrImage || 'https://placehold.co/300x300/ffe5ec/e05780?text=PromptPay+QR';
-            document.getElementById('display-qr-caption').textContent = qrCaption || 'สแกน QR Code เพื่อชำระเงิน';
-
+            const qrImg = document.getElementById('display-qr');
+            const captionEl = document.getElementById('display-qr-caption');
             const container = document.getElementById('payment-channels-list');
-            if (!channels || channels.length === 0) {
-                container.innerHTML = `<p class="text-center text-xs py-4" style="color: var(--text-muted);">ยังไม่ได้เพิ่มบัญชีธนาคาร</p>`;
+
+            if (isLoadingStore) {
+                captionEl.textContent = 'กำลังโหลด QR Code...';
+                container.replaceChildren();
+                container.appendChild(createEl('p', 'text-center text-xs py-4', 'กำลังโหลดบัญชีรับเงิน...'));
                 return;
             }
 
-            container.innerHTML = channels.map((ch, i) => `
-                <div class="p-4 rounded-2xl border flex items-center justify-between gap-3" style="background-color: var(--surface-subcard); border-color: var(--border-soft);">
-                    <div class="min-w-0">
-                        <span class="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-pink-50" style="color: var(--primary-dark);">${escapeHtml(ch.method)}</span>
-                        <p class="text-sm font-bold tracking-wide mt-1.5 select-all" style="color: var(--text-main);">${escapeHtml(ch.accountNumber)}</p>
-                        <p class="text-xs truncate" style="color: var(--text-muted);">${escapeHtml(ch.accountName)}</p>
-                    </div>
-                    <button type="button" onclick="copyAccountNumber('${escapeHtml(ch.accountNumber)}')" class="cute-bounce shrink-0 px-3.5 py-2 rounded-2xl bg-pink-50 hover:bg-pink-100 border border-pink-200 text-xs font-medium flex items-center gap-1.5" style="color: var(--primary-dark);">
-                        <i class="fa-regular fa-copy"></i>
-                        <span>คัดลอก</span>
-                    </button>
-                </div>
-            `).join('');
+            if (storeLoadError) {
+                captionEl.textContent = 'เกิดข้อผิดพลาด';
+                container.replaceChildren();
+                container.appendChild(createEl('p', 'text-center text-xs py-4 text-rose-600', storeLoadError));
+                return;
+            }
+
+            const { qrImage, qrCaption, channels } = state.payment;
+            if (qrImage) {
+                qrImg.src = qrImage;
+            } else {
+                qrImg.removeAttribute('src');
+            }
+            captionEl.textContent = qrCaption || (qrImage ? 'สแกนพร้อมเพย์ / QR Code เพื่อชำระเงิน' : 'ไม่มีข้อมูล QR Code');
+
+            container.replaceChildren();
+            if (!channels || channels.length === 0) {
+                const emptyP = createEl('p', 'text-center text-xs py-4', 'ไม่มีข้อมูลบัญชีรับเงิน');
+                emptyP.style.color = 'var(--text-muted)';
+                container.appendChild(emptyP);
+                return;
+            }
+
+            channels.forEach((ch) => {
+                const card = createEl('div', 'p-4 rounded-2xl border flex items-center justify-between gap-3');
+                card.style.backgroundColor = 'var(--surface-subcard)';
+                card.style.borderColor = 'var(--border-soft)';
+
+                const info = createEl('div', 'min-w-0');
+                const methodBadge = createEl('span', 'text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-pink-50', ch.method || 'บัญชีรับเงิน');
+                methodBadge.style.color = 'var(--primary-dark)';
+
+                const numP = createEl('p', 'text-sm font-bold tracking-wide mt-1.5 select-all', ch.accountNumber || '-');
+                numP.style.color = 'var(--text-main)';
+
+                const nameP = createEl('p', 'text-xs truncate', ch.accountName || '');
+                nameP.style.color = 'var(--text-muted)';
+
+                info.appendChild(methodBadge);
+                info.appendChild(numP);
+                info.appendChild(nameP);
+
+                const copyBtn = createEl('button', 'cute-bounce shrink-0 px-3.5 py-2 rounded-2xl bg-pink-50 hover:bg-pink-100 border border-pink-200 text-xs font-medium flex items-center gap-1.5');
+                copyBtn.type = 'button';
+                copyBtn.style.color = 'var(--primary-dark)';
+                copyBtn.addEventListener('click', () => copyAccountNumber(ch.accountNumber || ''));
+
+                copyBtn.appendChild(createEl('i', 'fa-regular fa-copy'));
+                copyBtn.appendChild(createEl('span', '', 'คัดลอก'));
+
+                card.appendChild(info);
+                card.appendChild(copyBtn);
+                container.appendChild(card);
+            });
         }
 
         function copyAccountNumber(numberText) {
             playCuteSound('pop');
+            if (!numberText) {
+                showToast('ไม่มีเลขบัญชีให้คัดลอกค่ะ', 'error');
+                return;
+            }
             const tempInput = document.createElement('input');
             tempInput.value = numberText;
             document.body.appendChild(tempInput);
@@ -1313,19 +1517,29 @@
 
         function openQrZoom() {
             playCuteSound('pop');
-            const src = document.getElementById('display-qr').src;
-            const caption = escapeHtml(state.payment.qrCaption || 'QR Code');
-            openModal(`
-                <div class="text-center space-y-3">
-                    <h3 class="text-sm font-semibold">${caption}</h3>
-                    <img src="${src}" alt="Zoomed QR" class="w-64 h-64 mx-auto object-contain rounded-2xl border border-pink-100 p-2 bg-pink-50/40">
-                    <button type="button" onclick="closeModal()" class="cute-bounce btn-primary w-full py-2 rounded-full text-xs font-medium">ปิดหน้าต่าง</button>
-                </div>
-            `);
+            const src = document.getElementById('display-qr').getAttribute('src') || '';
+            const caption = state.payment.qrCaption || 'QR Code';
+            openModal((box) => {
+                const wrap = createEl('div', 'text-center space-y-3');
+                wrap.appendChild(createEl('h3', 'text-sm font-semibold', caption));
+                if (src) {
+                    const img = createEl('img', 'w-64 h-64 mx-auto object-contain rounded-2xl border border-pink-100 p-2 bg-pink-50/40');
+                    img.src = src;
+                    img.alt = 'Zoomed QR';
+                    wrap.appendChild(img);
+                } else {
+                    wrap.appendChild(createEl('p', 'text-xs py-6', 'ไม่มีข้อมูล QR Code'));
+                }
+                const closeBtn = createEl('button', 'cute-bounce btn-primary w-full py-2 rounded-full text-xs font-medium', 'ปิดหน้าต่าง');
+                closeBtn.type = 'button';
+                closeBtn.addEventListener('click', closeModal);
+                wrap.appendChild(closeBtn);
+                box.appendChild(wrap);
+            });
         }
 
         /* =========================================================================
-           4. TABS, RATING SELECTOR & REVIEW SUBMISSION
+           5. TABS, RATING SELECTOR & REVIEW SUBMISSION
            ========================================================================= */
         function switchMainTab(tabName) {
             playCuteSound('pop');
@@ -1394,46 +1608,73 @@
             });
         }
 
-        function submitReview(event) {
+        async function submitReview(event) {
             event.preventDefault();
-            const nameInput = document.getElementById('review-name-input');
-            const textInput = document.getElementById('review-text-input');
+            await withButtonLock('submitReview', ['ui-btn-submit-review'], async () => {
+                if (!supabaseClient) {
+                    showToast('เกิดข้อผิดพลาด: ไม่พบระบบเชื่อมต่อ Supabase', 'error');
+                    return;
+                }
+                if (!state.storeId) {
+                    showToast('ไม่พบข้อมูลร้านค้าในระบบ', 'error');
+                    return;
+                }
 
-            const rawName = (nameInput.value || '').trim();
-            const rawText = (textInput.value || '').trim();
+                const nameInput = document.getElementById('review-name-input');
+                const textInput = document.getElementById('review-text-input');
 
-            const finalName = rawName || 'Anonymous';
-            const finalText = rawText || '+1';
-            const finalRating = rawText ? selectedRating : 5;
+                const rawName = (nameInput.value || '').trim();
+                const rawText = (textInput.value || '').trim();
 
-            const newReview = {
-                id: `rev-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                name: finalName,
-                avatar: pendingReviewAvatar,
-                rating: finalRating,
-                text: finalText,
-                createdAt: Date.now()
-            };
+                const finalName = rawName || 'Anonymous';
+                const finalText = rawText || '+1';
+                const finalRating = rawText ? selectedRating : 5;
 
-            state.reviews.unshift(newReview);
-            saveState();
+                const { data: inserted, error } = await supabaseClient
+                    .from('reviews')
+                    .insert([{
+                        store_id: state.storeId,
+                        reviewer_name: finalName,
+                        avatar_url: pendingReviewAvatar || '',
+                        rating: finalRating,
+                        comment_text: finalText
+                    }])
+                    .select('*')
+                    .single();
 
-            // Reset form
-            nameInput.value = '';
-            textInput.value = '';
-            pendingReviewAvatar = '';
-            document.getElementById('review-avatar-input').value = '';
-            document.getElementById('review-avatar-preview').classList.add('hidden');
-            document.getElementById('review-avatar-icon').classList.remove('hidden');
-            selectRating(5, false);
+                if (error) {
+                    showToast(`เกิดข้อผิดพลาดในการส่งรีวิว: ${error.message}`, 'error');
+                    return;
+                }
 
-            playCuteSound('success');
-            showToast(`ขอบคุณ ${finalName} สำหรับรีวิวน่ารัก ๆ ค่ะ`);
-            renderStatsAndReviews();
+                if (inserted) {
+                    state.reviews.unshift({
+                        id: inserted.id,
+                        storeId: inserted.store_id,
+                        name: inserted.reviewer_name || 'Anonymous',
+                        avatar: inserted.avatar_url || '',
+                        rating: Number(inserted.rating) || 5,
+                        text: inserted.comment_text || '+1',
+                        createdAt: inserted.created_at ? new Date(inserted.created_at).getTime() : Date.now()
+                    });
+                }
+
+                nameInput.value = '';
+                textInput.value = '';
+                pendingReviewAvatar = '';
+                document.getElementById('review-avatar-input').value = '';
+                document.getElementById('review-avatar-preview').classList.add('hidden');
+                document.getElementById('review-avatar-icon').classList.remove('hidden');
+                selectRating(5, false);
+
+                playCuteSound('success');
+                showToast(`ขอบคุณ ${finalName} สำหรับรีวิวน่ารัก ๆ ค่ะ`);
+                renderStatsAndReviews();
+            });
         }
 
         /* =========================================================================
-           5. IMAGE COMPRESSION / RESIZE HELPER
+           6. IMAGE COMPRESSION / RESIZE HELPER
            ========================================================================= */
         function readImageFileAsDataUrl(file, maxDimension, callback) {
             if (!file || !file.type.startsWith('image/')) {
@@ -1468,58 +1709,143 @@
         }
 
         /* =========================================================================
-           6. ADMIN AUTHENTICATION & STUDIO CONTROLS
+           7. ADMIN AUTHENTICATION (Session + public.is_admin()) & STUDIO CONTROLS
            ========================================================================= */
-        function openAdminLogin() {
+        async function openAdminLogin() {
             playCuteSound('pop');
             if (!document.getElementById('admin-view').classList.contains('hidden')) {
                 return;
             }
-            openModal(`
-                <div class="space-y-4">
-                    <div class="text-center">
-                        <div class="w-12 h-12 rounded-2xl bg-pink-100 mx-auto flex items-center justify-center text-lg mb-2" style="color: var(--primary-dark);">
-                            <i class="fa-solid fa-lock"></i>
-                        </div>
-                        <h3 class="text-base font-semibold">เข้าสู่ระบบหลังบ้าน</h3>
-                        <p class="text-xs mt-0.5" style="color: var(--text-muted);">กรอกรหัสผ่านแอดมิน 6 หลัก</p>
-                    </div>
-                    <form onsubmit="verifyAdminLogin(event)" class="space-y-3">
-                        <input type="password" id="login-pin-input" inputmode="numeric" pattern="\\d{6}" maxlength="6" placeholder="กรอกรหัสผ่าน 6 หลัก" class="cute-input w-full px-4 py-2.5 text-sm text-center tracking-widest" required autofocus>
-                        <div class="flex gap-2">
-                            <button type="button" onclick="closeModal()" class="flex-1 py-2 rounded-full bg-gray-100 text-xs font-medium text-gray-600">ยกเลิก</button>
-                            <button type="submit" class="cute-bounce flex-1 py-2 rounded-full btn-primary text-xs font-medium">เข้าใช้งาน</button>
-                        </div>
-                    </form>
-                </div>
-            `);
-        }
 
-        function verifyAdminLogin(event) {
-            event.preventDefault();
-            const pin = document.getElementById('login-pin-input').value.trim();
-            if (!/^\d{6}$/.test(pin)) {
-                playCuteSound('pop');
-                showToast('กรุณากรอกรหัสผ่านตัวเลข 6 หลักค่ะ', 'error');
+            const allowed = await verifyAdminSession();
+            if (allowed) {
+                await enterAdminMode();
                 return;
             }
-            if (pin === state.adminPin) {
-                closeModal();
-                enterAdminMode();
-                playCuteSound('success');
-                showToast('ยินดีต้อนรับสู่โหมดจัดการร้านค้าค่ะ');
-            } else {
-                playCuteSound('pop');
-                showToast('รหัสผ่านไม่ถูกต้องนะคะ', 'error');
+
+            if (currentSessionUser && !isAdminVerified) {
+                showToast('บัญชีนี้ไม่ได้รับสิทธิ์เป็นแอดมินค่ะ', 'error');
             }
+
+            openModal((box) => {
+                const wrap = createEl('div', 'space-y-4');
+                const header = createEl('div', 'text-center');
+                const badge = createEl('div', 'w-12 h-12 rounded-2xl bg-pink-100 mx-auto flex items-center justify-center text-lg mb-2');
+                badge.style.color = 'var(--primary-dark)';
+                badge.appendChild(createEl('i', 'fa-solid fa-lock'));
+                header.appendChild(badge);
+                header.appendChild(createEl('h3', 'text-base font-semibold', 'เข้าสู่ระบบหลังบ้าน'));
+                const sub = createEl('p', 'text-xs mt-0.5', 'เข้าสู่ระบบด้วยอีเมลและรหัสผ่านแอดมิน');
+                sub.style.color = 'var(--text-muted)';
+                header.appendChild(sub);
+
+                const form = createEl('form', 'space-y-3');
+                const emailInput = createEl('input', 'cute-input w-full px-4 py-2.5 text-sm');
+                emailInput.type = 'email';
+                emailInput.id = 'login-email-input';
+                emailInput.placeholder = 'อีเมลแอดมิน';
+                emailInput.required = true;
+                emailInput.autofocus = true;
+
+                const passInput = createEl('input', 'cute-input w-full px-4 py-2.5 text-sm');
+                passInput.type = 'password';
+                passInput.id = 'login-password-input';
+                passInput.placeholder = 'รหัสผ่าน';
+                passInput.required = true;
+
+                const btnRow = createEl('div', 'flex gap-2');
+                const cancelBtn = createEl('button', 'flex-1 py-2 rounded-full bg-gray-100 text-xs font-medium text-gray-600', 'ยกเลิก');
+                cancelBtn.type = 'button';
+                cancelBtn.addEventListener('click', closeModal);
+
+                const submitBtn = createEl('button', 'cute-bounce flex-1 py-2 rounded-full btn-primary text-xs font-medium', 'เข้าใช้งาน');
+                submitBtn.type = 'submit';
+                submitBtn.id = 'btn-admin-login-submit';
+
+                btnRow.appendChild(cancelBtn);
+                btnRow.appendChild(submitBtn);
+                form.appendChild(emailInput);
+                form.appendChild(passInput);
+                form.appendChild(btnRow);
+                form.addEventListener('submit', verifyAdminLogin);
+
+                wrap.appendChild(header);
+                wrap.appendChild(form);
+                box.appendChild(wrap);
+            });
         }
 
-        function enterAdminMode() {
+        async function verifyAdminLogin(event) {
+            event.preventDefault();
+            await withButtonLock('adminLogin', ['btn-admin-login-submit'], async () => {
+                if (!supabaseClient) {
+                    showToast('เกิดข้อผิดพลาด: ไม่พบระบบเชื่อมต่อ Supabase', 'error');
+                    return;
+                }
+                const email = (document.getElementById('login-email-input')?.value || '').trim();
+                const password = document.getElementById('login-password-input')?.value || '';
+                if (!email || !password) {
+                    showToast('กรุณากรอกอีเมลและรหัสผ่านให้ครบถ้วนค่ะ', 'error');
+                    return;
+                }
+
+                const { error: signInErr } = await supabaseClient.auth.signInWithPassword({
+                    email,
+                    password
+                });
+
+                if (signInErr) {
+                    showToast(`เข้าสู่ระบบไม่สำเร็จ: ${signInErr.message}`, 'error');
+                    return;
+                }
+
+                const allowed = await verifyAdminSession();
+                if (!allowed) {
+                    await supabaseClient.auth.signOut();
+                    isAdminVerified = false;
+                    currentSessionUser = null;
+                    showToast('บัญชีนี้ไม่ได้รับสิทธิ์เป็นแอดมิน จึงไม่สามารถเข้าใช้งานได้ค่ะ', 'error');
+                    return;
+                }
+
+                closeModal();
+                await enterAdminMode();
+                playCuteSound('success');
+                showToast('ยินดีต้อนรับสู่โหมดจัดการร้านค้าค่ะ');
+            });
+        }
+
+        async function logoutAdmin() {
+            await withButtonLock('adminLogout', ['btn-admin-logout'], async () => {
+                if (supabaseClient) {
+                    await supabaseClient.auth.signOut();
+                }
+                isAdminVerified = false;
+                currentSessionUser = null;
+                document.getElementById('admin-view').classList.add('hidden');
+                document.getElementById('client-view').classList.remove('hidden');
+                document.getElementById('btn-back-client').classList.add('hidden');
+                playCuteSound('pop');
+                showToast('ออกจากระบบหลังบ้านแล้วค่ะ');
+            });
+        }
+
+        async function enterAdminMode() {
+            const allowed = await verifyAdminSession();
+            if (!allowed) {
+                isAdminVerified = false;
+                document.getElementById('admin-view').classList.add('hidden');
+                document.getElementById('client-view').classList.remove('hidden');
+                document.getElementById('btn-back-client').classList.add('hidden');
+                showToast('ไม่มีสิทธิ์เข้าถึงหน้าแอดมินค่ะ', 'error');
+                return;
+            }
+
             document.getElementById('client-view').classList.add('hidden');
             document.getElementById('admin-view').classList.remove('hidden');
             document.getElementById('btn-back-client').classList.remove('hidden');
             populateAdminForms();
-            switchAdminTab('profile');
+            await switchAdminTab('profile');
         }
 
         function exitAdminMode() {
@@ -1530,7 +1856,13 @@
             renderAll();
         }
 
-        function switchAdminTab(tabName) {
+        async function switchAdminTab(tabName) {
+            const allowed = await verifyAdminSession();
+            if (!allowed) {
+                await enterAdminMode();
+                return;
+            }
+
             playCuteSound('pop');
             const tabs = ['profile', 'payment', 'reviews', 'theme'];
             tabs.forEach(t => {
@@ -1575,42 +1907,103 @@
             });
         }
 
-        function saveProfileSettings() {
-            state.profile.shopName = document.getElementById('admin-shop-name').value.trim() || 'lovely';
-            state.profile.welcomeMsg = document.getElementById('admin-welcome-msg').value.trim();
-            state.profile.social1 = {
-                label: document.getElementById('admin-social1-label').value.trim() || 'LINE',
-                url: document.getElementById('admin-social1-url').value.trim()
-            };
-            state.profile.social2 = {
-                label: document.getElementById('admin-social2-label').value.trim() || 'Instagram',
-                url: document.getElementById('admin-social2-url').value.trim()
-            };
+        async function saveProfileSettings() {
+            await withButtonLock('saveProfile', ['btn-save-profile'], async () => {
+                if (!(await verifyAdminSession())) {
+                    showToast('ไม่มีสิทธิ์บันทึกข้อมูลร้านค้าค่ะ', 'error');
+                    return;
+                }
 
-            if (adminDraftImages.avatar) state.profile.avatar = adminDraftImages.avatar;
-            if (adminDraftImages.banner) state.profile.banner = adminDraftImages.banner;
+                const shopName = document.getElementById('admin-shop-name').value.trim() || 'lovely';
+                const welcomeMsg = document.getElementById('admin-welcome-msg').value.trim();
+                const social1Label = document.getElementById('admin-social1-label').value.trim();
+                const social1Url = document.getElementById('admin-social1-url').value.trim();
+                const social2Label = document.getElementById('admin-social2-label').value.trim();
+                const social2Url = document.getElementById('admin-social2-url').value.trim();
 
-            saveState();
-            renderProfile();
-            playCuteSound('success');
-            showToast('บันทึกข้อมูลโปรไฟล์ร้านแล้วค่ะ');
+                const nextAvatar = adminDraftImages.avatar || state.profile.avatar || '';
+                const nextBanner = adminDraftImages.banner || state.profile.banner || '';
+
+                const storeId = await getOrCreateStoreId();
+                const { error } = await supabaseClient
+                    .from('stores')
+                    .update({
+                        shop_name: shopName,
+                        welcome_msg: welcomeMsg,
+                        avatar_url: nextAvatar,
+                        banner_url: nextBanner,
+                        social1_label: social1Label,
+                        social1_url: social1Url,
+                        social2_label: social2Label,
+                        social2_url: social2Url
+                    })
+                    .eq('id', storeId);
+
+                if (error) {
+                    showToast(`เกิดข้อผิดพลาดในการบันทึกข้อมูลร้าน: ${error.message}`, 'error');
+                    return;
+                }
+
+                state.profile.shopName = shopName;
+                state.profile.welcomeMsg = welcomeMsg;
+                state.profile.avatar = nextAvatar;
+                state.profile.banner = nextBanner;
+                state.profile.social1 = { label: social1Label, url: social1Url };
+                state.profile.social2 = { label: social2Label, url: social2Url };
+                adminDraftImages.avatar = '';
+                adminDraftImages.banner = '';
+
+                renderProfile();
+                playCuteSound('success');
+                showToast('บันทึกข้อมูลโปรไฟล์ร้านแล้วค่ะ');
+            });
         }
 
         function renderAdminPaymentRows() {
             const container = document.getElementById('admin-payment-rows');
+            container.replaceChildren();
             const channels = state.payment.channels || [];
-            container.innerHTML = channels.map((ch, idx) => `
-                <div class="p-3 rounded-2xl bg-pink-50/50 border border-pink-100 space-y-2">
-                    <div class="flex items-center justify-between gap-2">
-                        <input type="text" value="${escapeHtml(ch.method)}" data-pay-idx="${idx}" data-field="method" placeholder="ธนาคาร / ช่องทาง" class="pay-field cute-input flex-1 px-3 py-1.5 text-xs">
-                        <button type="button" onclick="removePaymentChannelRow(${idx})" class="text-xs px-2.5 py-1 rounded-full bg-rose-100 text-rose-600">ลบ</button>
-                    </div>
-                    <div class="grid grid-cols-2 gap-2">
-                        <input type="text" value="${escapeHtml(ch.accountNumber)}" data-pay-idx="${idx}" data-field="accountNumber" placeholder="เลขบัญชี / เบอร์" class="pay-field cute-input px-3 py-1.5 text-xs">
-                        <input type="text" value="${escapeHtml(ch.accountName)}" data-pay-idx="${idx}" data-field="accountName" placeholder="ชื่อบัญชี" class="pay-field cute-input px-3 py-1.5 text-xs">
-                    </div>
-                </div>
-            `).join('');
+
+            channels.forEach((ch, idx) => {
+                const wrapper = createEl('div', 'p-3 rounded-2xl bg-pink-50/50 border border-pink-100 space-y-2');
+                const topRow = createEl('div', 'flex items-center justify-between gap-2');
+
+                const methodInput = createEl('input', 'pay-field cute-input flex-1 px-3 py-1.5 text-xs');
+                methodInput.type = 'text';
+                methodInput.value = ch.method || '';
+                methodInput.placeholder = 'ธนาคาร / ช่องทาง';
+                methodInput.dataset.payIdx = String(idx);
+                methodInput.dataset.field = 'method';
+
+                const delBtn = createEl('button', 'text-xs px-2.5 py-1 rounded-full bg-rose-100 text-rose-600', 'ลบ');
+                delBtn.type = 'button';
+                delBtn.addEventListener('click', () => removePaymentChannelRow(idx));
+
+                topRow.appendChild(methodInput);
+                topRow.appendChild(delBtn);
+
+                const grid = createEl('div', 'grid grid-cols-2 gap-2');
+                const numInput = createEl('input', 'pay-field cute-input px-3 py-1.5 text-xs');
+                numInput.type = 'text';
+                numInput.value = ch.accountNumber || '';
+                numInput.placeholder = 'เลขบัญชี / เบอร์';
+                numInput.dataset.payIdx = String(idx);
+                numInput.dataset.field = 'accountNumber';
+
+                const nameInput = createEl('input', 'pay-field cute-input px-3 py-1.5 text-xs');
+                nameInput.type = 'text';
+                nameInput.value = ch.accountName || '';
+                nameInput.placeholder = 'ชื่อบัญชี';
+                nameInput.dataset.payIdx = String(idx);
+                nameInput.dataset.field = 'accountName';
+
+                grid.appendChild(numInput);
+                grid.appendChild(nameInput);
+
+                wrapper.appendChild(topRow);
+                wrapper.appendChild(grid);
+                container.appendChild(wrapper);
+            });
         }
 
         function collectAdminPaymentRowsFromDom() {
@@ -1618,7 +2011,15 @@
             document.querySelectorAll('.pay-field').forEach(input => {
                 const idx = Number(input.getAttribute('data-pay-idx'));
                 const field = input.getAttribute('data-field');
-                if (!rowsMap[idx]) rowsMap[idx] = { id: `pay-${idx + 1}`, method: '', accountNumber: '', accountName: '' };
+                if (!rowsMap[idx]) {
+                    const existing = state.payment.channels?.[idx];
+                    rowsMap[idx] = {
+                        id: existing?.id || null,
+                        method: '',
+                        accountNumber: '',
+                        accountName: ''
+                    };
+                }
                 rowsMap[idx][field] = input.value.trim();
             });
             return Object.values(rowsMap).filter(r => r.method || r.accountNumber || r.accountName);
@@ -1626,7 +2027,7 @@
 
         function addPaymentChannelRow() {
             const current = collectAdminPaymentRowsFromDom();
-            current.push({ id: `pay-${Date.now()}`, method: 'ธนาคารใหม่', accountNumber: '', accountName: '' });
+            current.push({ id: null, method: 'ธนาคารใหม่', accountNumber: '', accountName: '' });
             state.payment.channels = current;
             renderAdminPaymentRows();
         }
@@ -1638,84 +2039,230 @@
             renderAdminPaymentRows();
         }
 
-        function savePaymentSettings() {
-            state.payment.qrCaption = document.getElementById('admin-qr-caption').value.trim();
-            if (adminDraftImages.qr) state.payment.qrImage = adminDraftImages.qr;
-            state.payment.channels = collectAdminPaymentRowsFromDom();
-            saveState();
-            renderPayment();
-            playCuteSound('success');
-            showToast('บันทึกช่องทางชำระเงินแล้วค่ะ');
+        async function savePaymentSettings() {
+            await withButtonLock('savePayment', ['btn-save-payment'], async () => {
+                if (!(await verifyAdminSession())) {
+                    showToast('ไม่มีสิทธิ์บันทึกช่องทางชำระเงินค่ะ', 'error');
+                    return;
+                }
+
+                const qrCaption = document.getElementById('admin-qr-caption').value.trim();
+                const nextQrImage = adminDraftImages.qr || state.payment.qrImage || '';
+                const collected = collectAdminPaymentRowsFromDom();
+
+                const storeId = await getOrCreateStoreId();
+                const { error: storeErr } = await supabaseClient
+                    .from('stores')
+                    .update({
+                        qr_image_url: nextQrImage,
+                        qr_caption: qrCaption
+                    })
+                    .eq('id', storeId);
+
+                if (storeErr) {
+                    showToast(`เกิดข้อผิดพลาดในการบันทึก QR Code: ${storeErr.message}`, 'error');
+                    return;
+                }
+
+                const { error: delErr } = await supabaseClient
+                    .from('payment_channels')
+                    .delete()
+                    .eq('store_id', storeId);
+
+                if (delErr) {
+                    showToast(`เกิดข้อผิดพลาดในการอัปเดตบัญชีรับเงิน: ${delErr.message}`, 'error');
+                    return;
+                }
+
+                let insertedChannels = [];
+                if (collected.length > 0) {
+                    const payload = collected.map((c, idx) => ({
+                        store_id: storeId,
+                        method: c.method || 'บัญชีรับเงิน',
+                        account_name: c.accountName || '-',
+                        account_number: c.accountNumber || '-',
+                        sort_order: idx
+                    }));
+                    const { data: insData, error: insErr } = await supabaseClient
+                        .from('payment_channels')
+                        .insert(payload)
+                        .select('*')
+                        .order('sort_order', { ascending: true });
+
+                    if (insErr) {
+                        showToast(`เกิดข้อผิดพลาดในการบันทึกบัญชีรับเงิน: ${insErr.message}`, 'error');
+                        return;
+                    }
+                    insertedChannels = (insData || []).map(c => ({
+                        id: c.id,
+                        method: c.method,
+                        accountName: c.account_name,
+                        accountNumber: c.account_number,
+                        sortOrder: c.sort_order
+                    }));
+                }
+
+                state.payment.qrCaption = qrCaption;
+                state.payment.qrImage = nextQrImage;
+                state.payment.channels = insertedChannels;
+                adminDraftImages.qr = '';
+
+                renderPayment();
+                renderAdminPaymentRows();
+                playCuteSound('success');
+                showToast('บันทึกช่องทางชำระเงินแล้วค่ะ');
+            });
         }
 
-        function adminAddReview() {
-            const name = (document.getElementById('admin-new-rev-name').value || '').trim() || 'Anonymous';
-            const rating = Number(document.getElementById('admin-new-rev-rating').value) || 5;
-            const text = (document.getElementById('admin-new-rev-text').value || '').trim() || '+1';
+        async function adminAddReview() {
+            await withButtonLock('adminAddReview', ['btn-admin-add-review'], async () => {
+                if (!(await verifyAdminSession())) {
+                    showToast('ไม่มีสิทธิ์เพิ่มรีวิวในโหมดแอดมินค่ะ', 'error');
+                    return;
+                }
 
-            state.reviews.unshift({
-                id: `rev-${Date.now()}`,
-                name,
-                avatar: '',
-                rating,
-                text,
-                createdAt: Date.now()
+                const name = (document.getElementById('admin-new-rev-name').value || '').trim() || 'Anonymous';
+                const rating = Number(document.getElementById('admin-new-rev-rating').value) || 5;
+                const text = (document.getElementById('admin-new-rev-text').value || '').trim() || '+1';
+
+                const storeId = await getOrCreateStoreId();
+                const { data: inserted, error } = await supabaseClient
+                    .from('reviews')
+                    .insert([{
+                        store_id: storeId,
+                        reviewer_name: name,
+                        avatar_url: '',
+                        rating,
+                        comment_text: text
+                    }])
+                    .select('*')
+                    .single();
+
+                if (error) {
+                    showToast(`เกิดข้อผิดพลาดในการเพิ่มรีวิว: ${error.message}`, 'error');
+                    return;
+                }
+
+                if (inserted) {
+                    state.reviews.unshift({
+                        id: inserted.id,
+                        storeId: inserted.store_id,
+                        name: inserted.reviewer_name || 'Anonymous',
+                        avatar: inserted.avatar_url || '',
+                        rating: Number(inserted.rating) || 5,
+                        text: inserted.comment_text || '+1',
+                        createdAt: inserted.created_at ? new Date(inserted.created_at).getTime() : Date.now()
+                    });
+                }
+
+                document.getElementById('admin-new-rev-name').value = '';
+                document.getElementById('admin-new-rev-text').value = '';
+                renderAdminReviewsList();
+                renderStatsAndReviews();
+                playCuteSound('success');
+                showToast('เพิ่มรีวิวเข้าระบบแล้วค่ะ');
             });
-            saveState();
-            document.getElementById('admin-new-rev-name').value = '';
-            document.getElementById('admin-new-rev-text').value = '';
-            renderAdminReviewsList();
-            renderStatsAndReviews();
-            playCuteSound('success');
-            showToast('เพิ่มรีวิวเข้าระบบแล้วค่ะ');
         }
 
         function renderAdminReviewsList() {
             const container = document.getElementById('admin-reviews-list');
+            container.replaceChildren();
+
             if (!state.reviews.length) {
-                container.innerHTML = `<p class="text-center text-xs py-4" style="color: var(--text-muted);">ไม่มีรีวิวในระบบ</p>`;
+                const p = createEl('p', 'text-center text-xs py-4', 'ไม่มีข้อมูลรีวิว');
+                p.style.color = 'var(--text-muted)';
+                container.appendChild(p);
                 return;
             }
-            container.innerHTML = state.reviews.map(rev => {
+
+            state.reviews.forEach(rev => {
+                const row = createEl('div', 'p-3 rounded-2xl bg-pink-50/50 border border-pink-100 flex items-center justify-between gap-2 text-xs');
+                const info = createEl('div', 'min-w-0');
+
+                const nameEl = createEl('span', 'font-semibold', rev.name || 'Anonymous');
+                const heartsSpan = createEl('span', 'ml-1.5 inline-flex items-center gap-0.5');
                 const count = Math.min(5, Math.max(1, Number(rev.rating) || 5));
-                const heartsHtml = Array.from({ length: count }, () => `<i class="fa-solid fa-heart text-[10px]" style="color: var(--primary);"></i>`).join('');
-                return `
-                    <div class="p-3 rounded-2xl bg-pink-50/50 border border-pink-100 flex items-center justify-between gap-2 text-xs">
-                        <div class="min-w-0">
-                            <span class="font-semibold">${escapeHtml(rev.name)}</span>
-                            <span class="ml-1.5 inline-flex items-center gap-0.5">${heartsHtml}</span>
-                            <p class="truncate mt-0.5" style="color: var(--text-muted);">${escapeHtml(rev.text)}</p>
-                        </div>
-                        <button type="button" onclick="deleteReviewById('${rev.id}')" class="shrink-0 px-2.5 py-1 rounded-full bg-rose-100 text-rose-600 font-medium">ลบ</button>
-                    </div>
-                `;
-            }).join('');
+                for (let i = 0; i < count; i++) {
+                    const h = createEl('i', 'fa-solid fa-heart text-[10px]');
+                    h.style.color = 'var(--primary)';
+                    heartsSpan.appendChild(h);
+                }
+
+                const textEl = createEl('p', 'truncate mt-0.5', rev.text || '+1');
+                textEl.style.color = 'var(--text-muted)';
+
+                info.appendChild(nameEl);
+                info.appendChild(heartsSpan);
+                info.appendChild(textEl);
+
+                const delBtn = createEl('button', 'shrink-0 px-2.5 py-1 rounded-full bg-rose-100 text-rose-600 font-medium', 'ลบ');
+                delBtn.type = 'button';
+                delBtn.addEventListener('click', () => deleteReviewById(rev.id, delBtn));
+
+                row.appendChild(info);
+                row.appendChild(delBtn);
+                container.appendChild(row);
+            });
         }
 
-        function deleteReviewById(id) {
-            state.reviews = state.reviews.filter(r => r.id !== id);
-            saveState();
-            renderAdminReviewsList();
-            renderStatsAndReviews();
-            playCuteSound('pop');
-            showToast('ลบรีวิวเรียบร้อยแล้วค่ะ');
+        async function deleteReviewById(id, btnEl) {
+            const lockKey = `deleteReview-${id}`;
+            if (activeLocks.has(lockKey)) return;
+            activeLocks.add(lockKey);
+            if (btnEl) btnEl.disabled = true;
+
+            try {
+                if (!(await verifyAdminSession())) {
+                    showToast('ไม่มีสิทธิ์ลบรีวิวค่ะ', 'error');
+                    return;
+                }
+
+                const { error } = await supabaseClient
+                    .from('reviews')
+                    .delete()
+                    .eq('id', id);
+
+                if (error) {
+                    showToast(`เกิดข้อผิดพลาดในการลบรีวิว: ${error.message}`, 'error');
+                    return;
+                }
+
+                state.reviews = state.reviews.filter(r => r.id !== id);
+                renderAdminReviewsList();
+                renderStatsAndReviews();
+                playCuteSound('pop');
+                showToast('ลบรีวิวเรียบร้อยแล้วค่ะ');
+            } finally {
+                activeLocks.delete(lockKey);
+                if (btnEl) btnEl.disabled = false;
+            }
         }
 
         function renderThemePalette() {
             const grid = document.getElementById('theme-palette-grid');
+            grid.replaceChildren();
             const hasCustom = Boolean(normalizeHex(state.customColor));
-            grid.innerHTML = Object.entries(THEMES).map(([key, t]) => {
+
+            Object.entries(THEMES).forEach(([key, t]) => {
                 const active = !hasCustom && state.themeKey === key;
-                return `
-                    <button type="button" onclick="selectThemeKey('${key}')"
-                            class="p-2.5 rounded-2xl border text-left flex items-center gap-2 transition-all ${
-                                active ? 'border-2 font-semibold' : ''
-                            }" style="background-color: ${active ? 'var(--surface-soft)' : 'var(--surface-subcard)'}; border-color: ${active ? t.primary : 'var(--border-soft)'};">
-                        <span class="w-5 h-5 rounded-full shrink-0 shadow-2xs" style="background: linear-gradient(135deg, ${t.primary}, ${t.primaryLight});"></span>
-                        <span class="text-[11px] truncate">${t.name}</span>
-                    </button>
-                `;
-            }).join('');
+                const btn = createEl(
+                    'button',
+                    `p-2.5 rounded-2xl border text-left flex items-center gap-2 transition-all ${active ? 'border-2 font-semibold' : ''}`
+                );
+                btn.type = 'button';
+                btn.style.backgroundColor = active ? 'var(--surface-soft)' : 'var(--surface-subcard)';
+                btn.style.borderColor = active ? t.primary : 'var(--border-soft)';
+                btn.addEventListener('click', () => selectThemeKey(key));
+
+                const dot = createEl('span', 'w-5 h-5 rounded-full shrink-0 shadow-2xs');
+                dot.style.background = `linear-gradient(135deg, ${t.primary}, ${t.primaryLight})`;
+
+                const nameSpan = createEl('span', 'text-[11px] truncate', t.name);
+                btn.appendChild(dot);
+                btn.appendChild(nameSpan);
+                grid.appendChild(btn);
+            });
+
             syncCustomColorControls(normalizeHex(state.customColor) || THEMES[state.themeKey]?.primary || '#ff85a2');
         }
 
@@ -1729,13 +2276,31 @@
             if (swatch) swatch.style.backgroundColor = norm;
         }
 
-        function handleCustomColorInput(val) {
+        async function saveThemeFieldsToStore(themeKey, customColor) {
+            if (!isAdminVerified || !state.storeId || !supabaseClient) return true;
+            const { error } = await supabaseClient
+                .from('stores')
+                .update({
+                    theme_key: themeKey,
+                    custom_color: customColor,
+                    dark_mode: Boolean(state.darkMode)
+                })
+                .eq('id', state.storeId);
+
+            if (error) {
+                showToast(`เกิดข้อผิดพลาดในการบันทึกธีมสี: ${error.message}`, 'error');
+                return false;
+            }
+            return true;
+        }
+
+        async function handleCustomColorInput(val) {
             const norm = normalizeHex(val);
             if (!norm) return;
             state.customColor = norm;
-            saveState();
             applyTheme(state.themeKey);
             renderThemePalette();
+            await saveThemeFieldsToStore(state.themeKey, state.customColor);
         }
 
         function handleCustomHexTextInput(val) {
@@ -1748,7 +2313,7 @@
             }
         }
 
-        function applyCustomHexFromInput() {
+        async function applyCustomHexFromInput() {
             const raw = document.getElementById('admin-custom-hex-input')?.value || '';
             const norm = normalizeHex(raw);
             if (!norm) {
@@ -1756,63 +2321,130 @@
                 return;
             }
             state.customColor = norm;
-            saveState();
             applyTheme(state.themeKey);
             renderThemePalette();
             playCuteSound('heart');
+            await saveThemeFieldsToStore(state.themeKey, state.customColor);
             showToast(`ใช้โค้ดสี ${norm.toUpperCase()} แล้วค่ะ`);
         }
 
-        function selectThemeKey(key) {
+        async function selectThemeKey(key) {
             state.themeKey = key;
             state.customColor = '';
-            saveState();
             applyTheme(key);
             renderThemePalette();
             playCuteSound('heart');
+            await saveThemeFieldsToStore(state.themeKey, '');
             showToast(`เปลี่ยนธีมเป็น ${THEMES[key].name} แล้วค่ะ`);
         }
 
-        function saveThemeAndMusic() {
-            const ytUrl = document.getElementById('admin-yt-url').value.trim();
-            const songTitle = document.getElementById('admin-song-title').value.trim();
-            state.music.youtubeUrl = ytUrl;
-            if (songTitle) {
-                state.music.songTitle = songTitle;
-            } else if (ytUrl) {
-                state.music.songTitle = 'YouTube Background Track';
-            }
-            saveState();
-            renderMusicPill();
-            loadYouTubeVideoIfNeeded(state.music.isPlaying);
-            playCuteSound('success');
-            showToast('บันทึกการตั้งค่าธีมและเพลงแล้วค่ะ');
+        async function saveThemeAndMusic() {
+            await withButtonLock('saveThemeMusic', ['btn-save-theme-music'], async () => {
+                if (!(await verifyAdminSession())) {
+                    showToast('ไม่มีสิทธิ์บันทึกการตั้งค่าธีมและเพลงค่ะ', 'error');
+                    return;
+                }
+
+                const ytUrl = document.getElementById('admin-yt-url').value.trim();
+                const songTitle = document.getElementById('admin-song-title').value.trim();
+                const nextTitle = songTitle || (ytUrl ? 'YouTube Background Track' : 'Sweetie Cute Chime Melody');
+
+                const storeId = await getOrCreateStoreId();
+                const { error } = await supabaseClient
+                    .from('stores')
+                    .update({
+                        theme_key: state.themeKey || 'sakura',
+                        custom_color: state.customColor || '',
+                        dark_mode: Boolean(state.darkMode),
+                        youtube_url: ytUrl,
+                        song_title: nextTitle
+                    })
+                    .eq('id', storeId);
+
+                if (error) {
+                    showToast(`เกิดข้อผิดพลาดในการบันทึกธีมและเพลง: ${error.message}`, 'error');
+                    return;
+                }
+
+                state.music.youtubeUrl = ytUrl;
+                state.music.songTitle = nextTitle;
+
+                renderMusicPill();
+                loadYouTubeVideoIfNeeded(state.music.isPlaying);
+                playCuteSound('success');
+                showToast('บันทึกการตั้งค่าธีมและเพลงแล้วค่ะ');
+            });
         }
 
-        function changeAdminPin() {
-            const newPin = document.getElementById('admin-new-pin').value.trim();
-            if (!/^\d{6}$/.test(newPin)) {
-                showToast('กรุณาตั้งรหัสผ่านเป็นตัวเลข 6 หลักเท่านั้นค่ะ', 'error');
-                return;
-            }
-            state.adminPin = newPin;
-            document.getElementById('admin-new-pin').value = '';
-            saveState();
-            playCuteSound('success');
-            showToast('อัปเดตรหัสผ่านแอดมิน 6 หลักเรียบร้อยค่ะ');
-        }
+        async function resetDemoData() {
+            await withButtonLock('resetData', ['btn-reset-data'], async () => {
+                if (!(await verifyAdminSession())) {
+                    showToast('ไม่มีสิทธิ์รีเซ็ตข้อมูลค่ะ', 'error');
+                    return;
+                }
+                if (!state.storeId) {
+                    showToast('ไม่มีข้อมูลร้านค้าให้รีเซ็ตค่ะ', 'error');
+                    return;
+                }
 
-        function resetDemoData() {
-            state = structuredClone(DEFAULT_STATE);
-            saveState();
-            populateAdminForms();
-            renderAll();
-            playCuteSound('pop');
-            showToast('รีเซ็ตข้อมูลร้านค้าเป็นค่าเริ่มต้นแล้วค่ะ');
+                const { error: chErr } = await supabaseClient
+                    .from('payment_channels')
+                    .delete()
+                    .eq('store_id', state.storeId);
+
+                if (chErr) {
+                    showToast(`เกิดข้อผิดพลาดในการล้างบัญชีรับเงิน: ${chErr.message}`, 'error');
+                    return;
+                }
+
+                const { error: revErr } = await supabaseClient
+                    .from('reviews')
+                    .delete()
+                    .eq('store_id', state.storeId);
+
+                if (revErr) {
+                    showToast(`เกิดข้อผิดพลาดในการล้างรีวิว: ${revErr.message}`, 'error');
+                    return;
+                }
+
+                const { error: stErr } = await supabaseClient
+                    .from('stores')
+                    .update({
+                        shop_name: '',
+                        welcome_msg: '',
+                        avatar_url: '',
+                        banner_url: '',
+                        social1_label: '',
+                        social1_url: '',
+                        social2_label: '',
+                        social2_url: '',
+                        qr_image_url: '',
+                        qr_caption: '',
+                        theme_key: 'sakura',
+                        custom_color: '',
+                        dark_mode: false,
+                        youtube_url: '',
+                        song_title: 'Sweetie Cute Chime Melody'
+                    })
+                    .eq('id', state.storeId);
+
+                if (stErr) {
+                    showToast(`เกิดข้อผิดพลาดในการรีเซ็ตข้อมูลร้าน: ${stErr.message}`, 'error');
+                    return;
+                }
+
+                state = structuredClone(EMPTY_STATE);
+                await loadStoreAndPaymentsFromSupabase();
+                await loadReviewsFromSupabase();
+                populateAdminForms();
+                renderAdminReviewsList();
+                playCuteSound('pop');
+                showToast('รีเซ็ตข้อมูลในฐานข้อมูลเรียบร้อยแล้วค่ะ');
+            });
         }
 
         /* =========================================================================
-           7. BACKGROUND MUSIC PLAYER (YOUTUBE + TONE.JS MELODY FALLBACK)
+           8. BACKGROUND MUSIC PLAYER (YOUTUBE + TONE.JS MELODY FALLBACK)
            ========================================================================= */
         function extractYouTubeId(url) {
             if (!url) return null;
@@ -1908,7 +2540,6 @@
         async function toggleMusicPlayback() {
             const nextPlaying = !state.music.isPlaying;
             state.music.isPlaying = nextPlaying;
-            saveState();
 
             if (nextPlaying) {
                 if (typeof Tone !== 'undefined' && Tone.context.state !== 'running') {
@@ -1950,47 +2581,8 @@
             }
         }
 
-        function openMusicModal() {
-            playCuteSound('pop');
-            openModal(`
-                <div class="space-y-4">
-                    <div class="text-center">
-                        <h3 class="text-base font-semibold">ตั้งค่าเพลงพื้นหลัง</h3>
-                        <p class="text-xs mt-0.5" style="color: var(--text-muted);">ใส่ลิงก์ YouTube หรือปล่อยว่างเพื่อใช้เมโลดี้ร้าน</p>
-                    </div>
-                    <div class="space-y-2.5">
-                        <div>
-                            <label class="block text-xs font-medium mb-1">ลิงก์ YouTube</label>
-                            <input type="text" id="modal-yt-url" value="${escapeHtml(state.music.youtubeUrl || '')}" placeholder="https://youtu.be/..." class="cute-input w-full px-3.5 py-2 text-xs">
-                        </div>
-                        <div>
-                            <label class="block text-xs font-medium mb-1">ชื่อเพลง</label>
-                            <input type="text" id="modal-song-title" value="${escapeHtml(state.music.songTitle || '')}" placeholder="ชื่อเพลง" class="cute-input w-full px-3.5 py-2 text-xs">
-                        </div>
-                    </div>
-                    <div class="flex gap-2">
-                        <button type="button" onclick="closeModal()" class="flex-1 py-2 rounded-full bg-gray-100 text-xs font-medium text-gray-600">ปิด</button>
-                        <button type="button" onclick="applyMusicModalSettings()" class="cute-bounce flex-1 py-2 rounded-full btn-primary text-xs font-medium">บันทึกเพลง</button>
-                    </div>
-                </div>
-            `);
-        }
-
-        function applyMusicModalSettings() {
-            const url = document.getElementById('modal-yt-url').value.trim();
-            const title = document.getElementById('modal-song-title').value.trim();
-            state.music.youtubeUrl = url;
-            state.music.songTitle = title || (url ? 'YouTube Background Track' : 'Sweetie Cute Chime Melody');
-            saveState();
-            renderMusicPill();
-            loadYouTubeVideoIfNeeded(state.music.isPlaying);
-            closeModal();
-            playCuteSound('success');
-            showToast('อัปเดตเพลงพื้นหลังแล้วค่ะ');
-        }
-
         /* =========================================================================
-           8. SCROLL REVEAL & INITIALIZATION
+           9. SCROLL REVEAL & INITIALIZATION
            ========================================================================= */
         let revealObserver = null;
 
@@ -2015,13 +2607,34 @@
             });
         }
 
-        window.addEventListener('DOMContentLoaded', () => {
+        window.addEventListener('DOMContentLoaded', async () => {
             renderAll();
             initYouTubeApi();
-            if (window.__storeCloud) {
-                initLiveCloudSync();
+
+            if (supabaseClient) {
+                supabaseClient.auth.onAuthStateChange(async (_event, session) => {
+                    currentSessionUser = session?.user || null;
+                    if (!currentSessionUser) {
+                        isAdminVerified = false;
+                        if (!document.getElementById('admin-view').classList.contains('hidden')) {
+                            document.getElementById('admin-view').classList.add('hidden');
+                            document.getElementById('client-view').classList.remove('hidden');
+                            document.getElementById('btn-back-client').classList.add('hidden');
+                        }
+                    } else {
+                        await verifyAdminSession();
+                    }
+                });
+
+                await verifyAdminSession();
+                await loadStoreAndPaymentsFromSupabase();
+                await loadReviewsFromSupabase();
             } else {
-                window.addEventListener('store-cloud-ready', () => initLiveCloudSync(), { once: true });
+                isLoadingStore = false;
+                isLoadingReviews = false;
+                storeLoadError = 'เกิดข้อผิดพลาด: ไม่พบระบบเชื่อมต่อ Supabase';
+                reviewsLoadError = 'เกิดข้อผิดพลาด: ไม่พบระบบเชื่อมต่อ Supabase';
+                renderAll();
             }
 
             setTimeout(() => {
